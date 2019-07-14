@@ -1,0 +1,44 @@
+Index of DDI0487D_b_armv8_arm:
+https://github.com/pmnxis/gen_ghidra_aarch64_idx/blob/master/modified/AARCH64.idx
+
+
+<Assembly>
+A Guide to ARM64 / AArch64 Assembly on Linux with Shellcodes and Cryptography :
+https://modexp.wordpress.com/2018/10/30/arm64-assembly/
+
+Assembly 기초 (ARM cortex-M3 기준) (한글):
+http://forum.falinux.com/zbxe/index.php?document_srl=557423&mid=lecture_tip
+
+
+<Register>
+PSTATE :
+https://developer.arm.com/docs/100878/latest/processor-state?origin_team=TK6SXSXCH
+
+SCTLR :
+https://developer.arm.com/docs/100878/latest/the-system-control-register?origin_team=TK6SXSXCH
+
+CTR (Cache Type Register) :
+http://forum.falinux.com/zbxe/index.php?document_srl=627913&mid=lecture_tip
+
+
+<Instruction, Macro>
+
+Barrier (DMB, DSB, ISB) 설명 (한글) :
+http://forum.falinux.com/zbxe/index.php?document_srl=534002&mid=Kernel_API
+
+B, BL, BX, BLX 명령 (한글) :
+http://trace32.com/wiki/index.php/B,_BL,_BX_and_BLX
+
+ADR (한글) :
+http://forum.falinux.com/zbxe/index.php?document_srl=627913&mid=lecture_tip
+
+
+<etc>
+
+Subsections:
+https://sourceware.org/binutils/docs/as/Sub_002dSections.html#Sub_002dSections
+
+ARM value encoding:
+https://alisdair.mcdiarmid.org/arm-immediate-value-encoding/
+
+
