@@ -117,7 +117,7 @@ pe_header:
 ENTRY(stext)
 	bl	preserve_boot_args
 	bl	el2_setup			// Drop to EL1, w0=cpu_boot_mode
-	adrp	x23, __PHYS_OFFSET
+	adrp	x23, __PHYS_OFFSET  // x23 = PC + __PHYS_OFFSET == 0x82000
 	and	x23, x23, MIN_KIMG_ALIGN - 1	// KASLR offset, defaults to 0
 	bl	set_cpu_boot_mode_flag
 	bl	__create_page_tables
@@ -330,7 +330,7 @@ __create_page_tables:
 	adr_l	x6, vabits_user
 	str	x5, [x6]
 	dmb	sy
-	dc	ivac, x6		// Invalidate potentially stale cache line
+        dc	ivac, x6		// Invalidate potentially stale cache line
 
 	/*
 	 * VA_BITS may be too small to allow for an ID mapping to be created
@@ -486,13 +486,17 @@ EXPORT_SYMBOL(kimage_vaddr)
  */
 ENTRY(el2_setup)
 	msr	SPsel, #1			// We want to use SP_EL{1,2}
-	mrs	x0, CurrentEL
-	cmp	x0, #CurrentEL_EL2
-	b.eq	1f
-	mov_q	x0, (SCTLR_EL1_RES1 | ENDIAN_SET_EL1)
+	mrs	x0, CurrentEL       // ? CurrentEL 값이 어떻게 설정되어있는지 정보 없음
+	cmp	x0, #CurrentEL_EL2  // if (x0 == 8)
+	b.eq	1f              // f = forward, b = backward 현재 라인 기준 (b.eq. beq?)
+	mov_q	x0, (SCTLR_EL1_RES1 | ENDIAN_SET_EL1)   // _RES1은 reserved로 예상됨. 
+                                                    // ENDIAN_SET_EL1은 CONFIG_CPU_BIG_ENDIAN 조건에 따라 
+                                                    // endian 설정. little endian의 경우 ENDIAN_SET_EL1 = 0
 	msr	sctlr_el1, x0
 	mov	w0, #BOOT_CPU_MODE_EL1		// This cpu booted in EL1
-	isb
+	isb                             // instruction synchronization barrier. 
+                                    // 명령 수행 순서에 우선순위가 있을 경우, 앞선 순서가 모두 완료된 뒤 
+                                    // 다음 명령이 실행되도록 보증하기 위한 명령
 	ret
 
 1:	mov_q	x0, (SCTLR_EL2_RES1 | ENDIAN_SET_EL2)
@@ -656,7 +660,7 @@ set_cpu_boot_mode_flag:
 	cmp	w0, #BOOT_CPU_MODE_EL2
 	b.ne	1f
 	add	x1, x1, #4
-1:	str	w0, [x1]			// This CPU has booted in EL1
+1:	str	w0, [x1]			// This CPU has booted in EL1  (w0 를 x1 값의 주소에 저장)
 	dmb	sy
 	dc	ivac, x1			// Invalidate potentially stale cache line
 	ret
