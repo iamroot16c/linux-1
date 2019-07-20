@@ -158,11 +158,87 @@ ENTRY(__inval_dcache_area)
  *	- size    - size in question
  */
 __dma_inv_area:
-	add	x1, x1, x0
+
+/* 이전 상황 */
+/* 	adrp	x0, init_pg_dir x0=>__initdata_begin,0x102000
+	adrp	x1, init_pg_end  x1,0x102000 
+	sub	x1, x1, x0  x1 = 0 이 될거라고 예상 */
+	add	x1, x1, x0 /* x1 = x1 + x0  x1 = init_pg_dir */
+
 	dcache_line_size x2, x3
-	sub	x3, x2, #1
+/*
+
+/*
+ * read_ctr - read CTR_EL0. If the system has mismatched register fields,
+ * provide the system wide safe value from arm64_ftr_reg_ctrel0.sys_val
+	.macro	read_ctr, reg
+alternative_if_not ARM64_MISMATCHED_CACHE_TYPE
+	mrs	\reg, ctr_el0			// read CTR
+	nop
+alternative_else
+	ldr_l	\reg, arm64_ftr_reg_ctrel0 + ARM64_FTR_SYSVAL
+alternative_endif
+	.endm
+        00100150 23 00 3b d5     mrs        x3,ctr_el0 
+		-> x3 <- Cache Type Register 저장 
+     nop
+		-> 한클럭 쉬우줍니다.
+
+        00100158 63 4c 50 d3     ubfx       x3,x3,#0x10,#0x4
+ubfx dst src parm0 parm1
+dst = ( src >> parm0 ) & (0x1 << parm1 - 1)
+( x3 >> 16 ) & (0x1 << 0x4 -1)
+(0x1 << 0x4 -1) = 0b10000 - 1 = 0xF
+dst = (x3 >> 16) & 0xF
+-> DMinLine 
+Link ref : https://developer.arm.com/docs/ddi0433/a/system-control/register-descriptions/cache-type-register?origin_team=TK6SXSXCH
+
+        0010015c 82 00 80 d2     mov        x2,#0x4
+        00100160 42 20 c3 9a     lsl        x2,x2,x3
+
+immediate타입의 LSL을 쓰지 않은 이유 에 관련한 링크 :
+http://blog.naver.com/PostView.nhn?blogId=gangst11&logNo=145839687
+
+		lsl 을 쓰기 위해서 mov 를 통해 x2 에 0x4를 넣은뒤 x2 = x3 << x2(0x4);
+
+Wd
+Is the 32-bit name of the general-purpose destination register, in the range 0 to 31.
+
+Wn
+Is the 32-bit name of the first general-purpose source register, in the range 0 to 31.
+
+Wm
+Is the 32-bit name of the second general-purpose source register, in the range 0 to 31.
+
+dcache_line_size x2, x3 는 
+결국에는 x2 = (4 << (in_ctr_el0 >> 0x10 & 0xf) ) ;
+
+ */
+	
+	sub	x3, x2, #1	/* x3 = x2 - 1 , 마스킹 하기위해서 0b1111 형태로 만든것으로 추정 */
 	tst	x1, x3				// end cache line aligned?
+	// x1 은 현재 주소?
+	
+	/* tst x1 x3 as ANDS WZR, <Wn>, #<imm> 
+	WZR = 000000
+	WZR = x1 & x3;
+	if (x1 & x3)
+	if ((lParm2 + uParm1 & uVar4) != 0)
+	*/
+
+/* x3 = cache_size - 0x1 (마스킹 타입?) 
+x1 = init_pg_end ?
+BIC Rd Rn Op2
+-> 
+*Rd = *Rn & (~Op2) 
+이렇게 작동하니
+x1 = x1(init_pg_end) & (~x3 (cache_size 마스킹타입))
+*/
 	bic	x1, x1, x3
+/*
+	tst에서 zero flag를 세워준다.
+
+ */
 	b.eq	1f
 	dc	civac, x1			// clean & invalidate D / U line
 1:	tst	x0, x3				// start cache line aligned?
