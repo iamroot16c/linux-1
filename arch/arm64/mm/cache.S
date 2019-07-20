@@ -163,18 +163,59 @@ __dma_inv_area:
 	sub	x3, x2, #1
 	tst	x1, x3				// end cache line aligned?
 	bic	x1, x1, x3
+    /*
+       x1 = x1 & ~x3, x1 = end address, x3 = size - 1
+       ?
+       */
 	b.eq	1f
+    /*
+       1f로 분기
+       tst의 연산 결과에 따른 flag를 보고
+     */
 	dc	civac, x1			// clean & invalidate D / U line
+    /*
+       주석 이외의 추가적인 해석은 하지못함
+     */
 1:	tst	x0, x3				// start cache line aligned?
+    /*
+       x0와 x3의 레지스터의 비트를 테스트? 테스트의 명확한 의미는?
+     */
+
 	bic	x0, x0, x3
+    /*
+       x0 = x0 & ~x3
+     */
 	b.eq	2f
+    /*
+       tst 연산 결과에 따라 2로 분기
+     */
 	dc	civac, x0			// clean & invalidate D / U line
 	b	3f
+    /*
+       3으로 분기
+     */
 2:	dc	ivac, x0			// invalidate D / U line
 3:	add	x0, x0, x2
+    /*
+       x0 = x0 + x2, x0 = bic에 의해 aligned 된 시작 주소, x2 = dcache_line_size
+     */
+
 	cmp	x0, x1
+    /*
+       x0와 x1를 비교
+     */
 	b.lo	2b
+    /*
+       https://m.blog.naver.com/hts0128/90068943230
+       carry에 따라 위에 있는 2로 분기
+     */
 	dsb	sy
+    /*
+       이 명령어가 완료될 때까지 프로그램 순서에서 이 명령어 뒤에 있는 명령어는 실행되지 않습니다
+     */
+
+    /*
+     */
 	ret
 ENDPIPROC(__inval_dcache_area)
 ENDPROC(__dma_inv_area)

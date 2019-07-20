@@ -581,7 +581,14 @@ USER(\label, ic	ivau, \tmp2)			// invalidate I line PoU
 	 * supporting this configuration with 64K pages.
 	 */
 	orr	\pte, \phys, \phys, lsr #36
+    /*
+        pte = phys | phys>>36
+        36이 가지는 의미는 알지못함
+     */
 	and	\pte, \pte, #PTE_ADDR_MASK
+    /*
+        pte = pte & PTE_ADDR_MASK
+     */
 #else
 	mov	\pte, \phys
 #endif

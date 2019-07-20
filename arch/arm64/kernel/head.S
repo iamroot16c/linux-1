@@ -162,12 +162,42 @@ ENDPROC(preserve_boot_args)
  */
 	.macro	create_table_entry, tbl, virt, shift, ptrs, tmp1, tmp2
 	add	\tmp1, \tbl, #PAGE_SIZE
+    /*
+        tmp1 = tbl + PAGE_SIZE
+     */
+
 	phys_to_pte \tmp2, \tmp1
+    /*
+        .macro	phys_to_pte, pte, phys
+        tmp2 = pte(page table entry)
+        tmp1 = phys
+     */
+
 	orr	\tmp2, \tmp2, #PMD_TYPE_TABLE	// address of next table and entry type
+    /*
+        tmp2 = tmp2 | PMD_TYPE_TABLE
+     */
+
 	lsr	\tmp1, \virt, #\shift
+    /*
+        tmp1 = virt >> shift
+     */
+
 	sub	\ptrs, \ptrs, #1
+    /*
+        ptrs = ptrs - 1
+     */
+
 	and	\tmp1, \tmp1, \ptrs		// table index
+    /*
+        tmp1 = tmp1 & ptrs
+     */
+
 	str	\tmp2, [\tbl, \tmp1, lsl #3]
+    /*
+     
+     */
+
 	add	\tbl, \tbl, #PAGE_SIZE		// next level table page
 	.endm
 
@@ -302,34 +332,116 @@ __create_page_tables:
 	 * Clear the init page tables.
 	 */
 	adrp	x0, init_pg_dir
+    /*
+       x0 = init_pg_dir의 주소, 어떤 주소인지는 명확하게 이해하지 못함
+     */
+
 	adrp	x1, init_pg_end
+    /*
+       x1 = init_pg_end의 주소 
+     */
+
 	sub	x1, x1, x0
+    /*
+       x1 = x1 - x0, x1 = init_pg_dir의 크기
+     */
+
 1:	stp	xzr, xzr, [x0], #16
+    /*
+       x0[0] = 0, x0[1] = 0, x0 += 2
+     */
+
 	stp	xzr, xzr, [x0], #16
+    /*
+       x0[2] = 0, x0[3] = 0, x0 += 2
+     */
+
 	stp	xzr, xzr, [x0], #16
+    /*
+       x0[4] = 0, x0[5] = 0, x0 += 2
+     */
+
 	stp	xzr, xzr, [x0], #16
+    /*
+       x0[6] = 0, x0[7] = 0, x0 += 2
+     */
+
 	subs	x1, x1, #64
+    /*
+       x1 = x1 - 64
+       subs = sub + status flags를 set, 어떤 flag를 set하는지 조사!
+     */
+
 	b.ne	1b
+    /*
+       status flag Z가 0이면, backword 1로 분기
+     */
 
 	mov	x7, SWAPPER_MM_MMUFLAGS
+    /*
+       x7 = SWAPPER_MM_MMUFLAGS
+       조건부 컴파일에 따라 SWAPPER_MM_MMUFLAGS(Initial memory map attributes)를 만듬
+     */
 
 	/*
 	 * Create the identity mapping.
 	 */
 	adrp	x0, idmap_pg_dir
+    /*
+       x0 = idmap 페이지 테이블의 주소
+     */
+
 	adrp	x3, __idmap_text_start		// __pa(__idmap_text_start)
+    /*
+       x3 = idmap 텍스트의 시작 주소
+     */
 
 #ifdef CONFIG_ARM64_USER_VA_BITS_52
+    /*
+       위의 define이 코드에서 정의되어 있지않음
+       페이징을 위한 가상주소의 비트 사이즈를 52로 사용할 경우 아래의 작업을 해준다?
+     */
+
 	mrs_s	x6, SYS_ID_AA64MMFR2_EL1
+    /*
+       x6 = SYS_ID_AA64MMFR2_EL1
+     */
+
 	and	x6, x6, #(0xf << ID_AA64MMFR2_LVA_SHIFT)
+    /*
+       x6 = x6 & (0xf << ID_AA64MMFR2_LVA_SHIFT)
+     */
+
 	mov	x5, #52
+    /*
+       x5 = 52
+     */
 	cbnz	x6, 1f
+    /*
+       0인 경우 비교 및 분기
+       조건 코드 플래그를 변경하지 않는다는 점을 제외하고 CBZ Rn, label은 다음과 같습니다.
+           CMP     Rn, #0
+           BEQ     label
+           CMP     x6, #0
+           BEQ     1f
+     */
 #endif
 	mov	x5, #VA_BITS
+    /*
+       x5 = VA_BITS (= 48)
+     */
 1:
 	adr_l	x6, vabits_user
 	str	x5, [x6]
+    /*
+       x6 = vabits_user의 주소
+       vabits_user = x5
+     */
 	dmb	sy
+    /*
+       프로그램 순서에서 DMB 명령어 앞에 있는 모든 명시적 메모리 액세스가 DMB 명령어 뒤에 있는 명시적 메모리 액세스보다 앞에 표시되도록 합니다.
+     */
+
 	dc	ivac, x6		// Invalidate potentially stale cache line
 
 	/*
@@ -345,18 +457,47 @@ __create_page_tables:
 	 * the physical address of __idmap_text_end.
 	 */
 	adrp	x5, __idmap_text_end
+    /*
+       x5 = idmap 텍스트의 끝 주소
+     */
+
 	clz	x5, x5
+    /*
+       x5 = x5에서 연속된 0의 개수
+     */
 	cmp	x5, TCR_T0SZ(VA_BITS)	// default T0SZ small enough?
+    /*
+       x5와 64 - VA_BITS을 비교
+     */
+
 	b.ge	1f			// .. then skip VA range extension
+    /*
+       ge = Greater than or equal to 
+       x5가 TCR_T0SZ(VA_BITS)과 같거나 크면 forward 1로 분기
+     */
 
 	adr_l	x6, idmap_t0sz
 	str	x5, [x6]
+    /*
+       x6 = idmap_t0sz의 주소
+       idmap_t0sz = x5
+     */
+
 	dmb	sy
 	dc	ivac, x6		// Invalidate potentially stale cache line
 
 #if (VA_BITS < 48)
 #define EXTRA_SHIFT	(PGDIR_SHIFT + PAGE_SHIFT - 3)
+    /*
+        PGDIR_SHIFT determines the size a top-level page table entry can map
+        (depending on the configuration, this level can be 0, 1 or 2).
+        PAGE_SHIFT determines the page size
+        3 = PGTABLE_LEVEL
+     */
 #define EXTRA_PTRS	(1 << (PHYS_MASK_SHIFT - EXTRA_SHIFT))
+    /*
+        Highest possible physical address supported.
+     */
 
 	/*
 	 * If VA_BITS < 48, we have to configure an additional table level.
@@ -370,7 +511,21 @@ __create_page_tables:
 #endif
 
 	mov	x4, EXTRA_PTRS
+    /*
+       x4 = EXTRA_PTRS
+     */
+
 	create_table_entry x0, x3, EXTRA_SHIFT, x4, x5, x6
+    /*
+       .macro	create_table_entry, tbl, virt, shift, ptrs, tmp1, tmp2
+       Preserves:	virt
+       Corrupts:	ptrs, tmp1, tmp2
+       Returns:	tbl -> next level table page address
+       x0 = page table address
+       x3 = virtual address
+       EXTRA_SHIFT = #imm page table shift
+       x4 = #imm pointers per table page
+     */
 #else
 	/*
 	 * If VA_BITS == 48, we don't have to configure an additional
