@@ -148,7 +148,7 @@ ENTRY(__inval_dcache_area)
  */
 __dma_inv_area:
 	add	x1, x1, x0
-	dcache_line_size x2, x3
+	dcache_line_size x2, x3 // 해당 명령은 매크로의 조합을 계층적으로 사용하여 매핑되어 있음.
 	sub	x3, x2, #1
 	tst	x1, x3				// end cache line aligned?
 	bic	x1, x1, x3
