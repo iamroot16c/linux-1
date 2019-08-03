@@ -406,15 +406,42 @@ ENDPROC(idmap_kpti_install_ng_mappings)
 	.pushsection ".idmap.text", "awx"
 ENTRY(__cpu_setup)
 	tlbi	vmalle1				// Invalidate local TLB
+	/* tlb : 한번 방문했던 물리주소를 저장 
+	   tlbi : tlb를 무효화 
+	   vmalle1 : virtual memory all EL1
+	   tlbi vmalle1 : EL1이하를 무효화
+	*/
 	dsb	nsh
+	/* dsb : isb+dmb
+	   cpu가 instruction 재배치를 막는다 
+	   dsb nsh : 현재영역을 비공유 옵션으로 변경
+	 */
 
 	mov	x0, #3 << 20
 	msr	cpacr_el1, x0			// Enable FP/ASIMD
+	/*     
+	부동소수점 연산/64비트를 넘는 데이터를 처리하는 
+	instructtion에 대해서 trap하지 않는다
+	 */
 	mov	x0, #1 << 12			// Reset mdscr_el1 and disable
 	msr	mdscr_el1, x0			// access to the DCC from EL0
 	isb					// Unmask debug exceptions now,
+	/* 이전 명령어가 끝나야 수행 됨 */
 	enable_dbg				// since this is per-cpu
+	/* arch/arm64/include/asm/assembler.h : 77
+	   msr daifclr, #8
+	   PSTATE의D비트를 '0' : 디버그 익셉션 발생을 허용
+	   */
 	reset_pmuserenr_el0 x0			// Disable PMU access from EL0
+	/* arch/arm65/include/asm/assembler.h : 444
+	   mrs x0, id_aa64dfr0_el1
+	   sbfx x0, x0, #8, #4
+	   // x0 = x0[11:8] // PMUver
+	   cmp x0, #1
+	   b.lt 9000f
+	   msr pmuserenr_el0, xzr
+	   // pmuserenr_el0 = 0
+	   */
 	/*
 	 * Memory region attributes for LPAE:
 	 *
@@ -433,6 +460,11 @@ ENTRY(__cpu_setup)
 		     MAIR(0x44, MT_NORMAL_NC) | \
 		     MAIR(0xff, MT_NORMAL) | \
 		     MAIR(0xbb, MT_NORMAL_WT)
+			 /* x5 = 0xbbff440c0400
+				교재151p 참조(메모리타입속성) 
+				교재39,40p 참조
+	ldr x5, #0xbbff440c0400 은 불가함(size over)
+				*/
 	msr	mair_el1, x5
 	/*
 	 * Prepare SCTLR
