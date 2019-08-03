@@ -45,6 +45,12 @@
 
 #include "efi-header.S"
 
+/*
+ * #define KERNEL_START      _text
+ * TEXT_OFFSET := 0x0008000 // 32KB
+ */
+
+
 #define __PHYS_OFFSET	(KERNEL_START - TEXT_OFFSET)
 
 #if (TEXT_OFFSET & 0xfff) != 0
@@ -119,8 +125,8 @@ ENTRY(stext)
 	bl	el2_setup			// Drop to EL1, w0=cpu_boot_mode
 	adrp	x23, __PHYS_OFFSET  // x23 = PC + __PHYS_OFFSET == 0x82000
 	and	x23, x23, MIN_KIMG_ALIGN - 1	// KASLR offset, defaults to 0
-	bl	set_cpu_boot_mode_flag
-	bl	__create_page_tables
+    bl	set_cpu_boot_mode_flag
+    bl	__create_page_tables
 	/*
 	 * The following calls CPU setup code, see arch/arm64/mm/proc.S for
 	 * details.
@@ -186,9 +192,12 @@ ENDPROC(preserve_boot_args)
  * Preserves:	tbl, eindex, flags, inc
  * Corrupts:	index, tmp1
  * Returns:	rtbl
+
+   Entry 의 크기가 8바이트 이므로 lsl #3.
  */
+
 	.macro populate_entries, tbl, rtbl, index, eindex, flags, inc, tmp1
-.Lpe\@:	phys_to_pte \tmp1, \rtbl
+.Lpe\@:	phys_to_pte \tmp1, \rtbl // x12 = x1
 	orr	\tmp1, \tmp1, \flags	// tmp1 = table entry
 	str	\tmp1, [\tbl, \index, lsl #3]
 	add	\rtbl, \rtbl, \inc	// rtbl = pa next level
@@ -355,7 +364,22 @@ __create_page_tables:
 	dc	ivac, x6		// Invalidate potentially stale cache line
 
 #if (VA_BITS < 48)
-#define EXTRA_SHIFT	(PGDIR_SHIFT + PAGE_SHIFT - 3)
+/*
+#define PGDIR_SHIFT		ARM64_HW_PGTABLE_LEVEL_SHIFT(4 - CONFIG_PGTABLE_LEVELS ) 
+#define ARM64_HW_PGTABLE_LEVEL_SHIFT(n)	((PAGE_SHIFT - 3) * (4 - (n)) + 3)
+
+    PGDIR_SHIFT = 30
+    PAGE_SHIFT = 12
+    EXTRA_SHIFT = 39
+    EXTRA_PTRS = 1 << 9
+
+config ARM64_PA_BITS
+    int
+    default 48 if ARM64_PA_BITS_48  HERE~
+    default 52 if ARM64_PA_BITS_52
+
+*/
+#define EXTRA_SHIFT	(PGDIR_SHIFT + PAGE_SHIFT - 3) 
 #define EXTRA_PTRS	(1 << (PHYS_MASK_SHIFT - EXTRA_SHIFT))
 
 	/*
@@ -375,16 +399,81 @@ __create_page_tables:
 	/*
 	 * If VA_BITS == 48, we don't have to configure an additional
 	 * translation level, but the top-level table has more entries.
+
+        PHYS_MASK_SHIFT = 48
+        PGDIR_SHIFT = 39
+        PAGE_SHIFT = 12 // page가 4K 기준일때
+        CONFIG_PGTABLE_LEVELS = 4
+
+#define PGDIR_SHIFT		ARM64_HW_PGTABLE_LEVEL_SHIFT(4 - CONFIG_PGTABLE_LEVELS ) 
+#define ARM64_HW_PGTABLE_LEVEL_SHIFT(n)	((PAGE_SHIFT - 3) * (4 - (n)) + 3) //39
+
+
+    u64 idmap_ptrs_per_pgd = PTRS_PER_PGD;
+    #define PTRS_PER_PGD		(1 << (MAX_USER_VA_BITS - PGDIR_SHIFT))
+    #define MAX_USER_VA_BITS	VA_BITS
+    */
+
+	/*
+	 * @src: source register (32 or 64 bit wide)
+	 * @sym: name of the symbol
+	 * @tmp: mandatory 64-bit scratch register to calculate the address
+	 *       while <src> needs to be preserved.
+
+	.macro	str_l, src, sym, tmp
+	adrp	\tmp, \sym
+	str	\src, [\tmp, :lo12:\sym]
+	.endm
+
+    adrp 에 대한 자세한 것은 추후 조사.
 	 */
-	mov	x4, #1 << (PHYS_MASK_SHIFT - PGDIR_SHIFT)
-	str_l	x4, idmap_ptrs_per_pgd, x5
+	str_l	x4, idmap_ptrs_per_pgd, x5 //idmap_ptrs_per_pgd == 1 << (48 - 21)
+	mov	x4, #1 << (PHYS_MASK_SHIFT - PGDIR_SHIFT) // 48-21
+	mov	x4, #1 << (PHYS_MASK_SHIFT - PGDIR_SHIFT) // 48-21
 #endif
 1:
 	ldr_l	x4, idmap_ptrs_per_pgd
 	mov	x5, x3				// __pa(__idmap_text_start)
 	adr_l	x6, __idmap_text_end		// __pa(__idmap_text_end)
 
+
+/*
+ * Map memory for specified virtual address range. Each level of page table needed supports
+ * multiple entries. If a level requires n entries the next page table level is assumed to be
+ * formed from n pages.
+ *
+ *	tbl:	location of page table
+ *	rtbl:	address to be used for first level page table entry (typically tbl + PAGE_SIZE)
+ *	vstart:	start address to map
+ *	vend:	end address to map - we map [vstart, vend]
+ *	flags:	flags to use to map last level entries
+ *	phys:	physical address corresponding to vstart - physical memory is contiguous
+ *	pgds:	the number of pgd entries
+ *
+ * Temporaries:	istart, iend, tmp, count, sv - these need to be different registers
+ * Preserves:	vstart, vend, flags
+ * Corrupts:	tbl, rtbl, istart, iend, tmp, count, sv
+	.macro map_memory, tbl, rtbl, vstart, vend, flags, phys, pgds, istart, iend, tmp, count, sv
+	add \rtbl, \tbl, #PAGE_SIZE  //  x1 = &idmap_pg_dir + PAGE_SIZE(4K)
+	mov \sv, \rtbl               // x14 = &idmap_pg_dir + PAGE_SIZE(4K)
+	mov \count, #0               // x13 = 0
+	compute_indices \vstart, \vend, #PGDIR_SHIFT, \pgds, \istart, \iend, \count
+	populate_entries \tbl, \rtbl, \istart, \iend, #PMD_TYPE_TABLE, #PAGE_SIZE, \tmp
+	mov \tbl, \sv
+	mov \sv, \rtbl
+ */
+
 	map_memory x0, x1, x3, x6, x7, x3, x4, x10, x11, x12, x13, x14
+
+/*
+    x0 : &idmap_pg_dir
+    x1 : x1 = x0 + PAGE_SIZE
+    x3 : __pa(__idmap_text_start)
+    x6 : __pa(__idmap_text_end)
+    x7 : SWAPPER_MM_MMUFLAGS
+    x4 : &idmap_ptrs_per_pgd
+    x10 : Temporaries 
+*/
 
 	/*
 	 * Map the kernel image (starting with PHYS_OFFSET).
@@ -485,22 +574,45 @@ EXPORT_SYMBOL(kimage_vaddr)
  * booted in EL1 or EL2 respectively.
  */
 ENTRY(el2_setup)
+/*
+    SPsel 이 0이면 El0 으로만, 1일경우 1이상의 모든것으로 설정가능.
+*/
 	msr	SPsel, #1			// We want to use SP_EL{1,2}
-	mrs	x0, CurrentEL       // ? CurrentEL 값이 어떻게 설정되어있는지 정보 없음
-	cmp	x0, #CurrentEL_EL2  // if (x0 == 8)
-	b.eq	1f              // f = forward, b = backward 현재 라인 기준 (b.eq. beq?)
-	mov_q	x0, (SCTLR_EL1_RES1 | ENDIAN_SET_EL1)   // _RES1은 reserved로 예상됨. 
-                                                    // ENDIAN_SET_EL1은 CONFIG_CPU_BIG_ENDIAN 조건에 따라 
-                                                    // endian 설정. little endian의 경우 ENDIAN_SET_EL1 = 0
+/*
+    mrs PSR의 내용을 범용 레지스터로 이동
+    현재 Exception Level의 값을 General Register인 X0에 이동
+*/
+	mrs	x0, CurrentEL
+	cmp	x0, #CurrentEL_EL2
+	b.eq	1f  // 1f는 현재 기준으로 forward로 앞쪽 1
+
+/*
+    SCTLR_EL1_RES1	_BITUL(11,20,22,28,29)
+                    _BITUL(x) (_UL(1) << (x))
+    ENDIAN_SET_EL1		0
+    sctrl_el1 은 Exception Level1 용 시스템 컨트롤 레지스터
+    isb 는 현재 파이프라인에 들어 있는 명령들을 클리어하고 현재의 컨텍스트로 명령들을 패치.
+    msr : Move to system coprocessor register from ARM register.
+    SCTLR_EL1, System Control Register, EL1 : The SCTLR_EL1 provides top level control of the system, including its memory system, at EL1 and EL0.
+*/
+	mov_q	x0, (SCTLR_EL1_RES1 | ENDIAN_SET_EL1)
 	msr	sctlr_el1, x0
-	mov	w0, #BOOT_CPU_MODE_EL1		// This cpu booted in EL1
-	isb                             // instruction synchronization barrier. 
-                                    // 명령 수행 순서에 우선순위가 있을 경우, 앞선 순서가 모두 완료된 뒤 
-                                    // 다음 명령이 실행되도록 보증하기 위한 명령
+	mov	w0, #BOOT_CPU_MODE_EL0		// This cpu booted in EL1
+	isb
 	ret
+
+
+/*
+    SCTRL_EL2_RES1  _BITUL(4,5,11,16,18,22,23,28,29)
+*/
 
 1:	mov_q	x0, (SCTLR_EL2_RES1 | ENDIAN_SET_EL2)
 	msr	sctlr_el2, x0
+
+/*
+  참고자료 : https://lwn.net/Articles/650524/
+  VHE 는 Virtualization Host Extension의 약자로 Armv8.1에서 사용되며 타입2 하이퍼바이저를 지원? 가상화 오버헤드가 줄어들며 호스트와 게스트 사이에 공유된 시스템 레지스터의 갯수가 줄어들었다고 함.`
+*/
 
 #ifdef CONFIG_ARM64_VHE
 	/*
@@ -508,6 +620,14 @@ ENTRY(el2_setup)
 	 * x2 being non-zero indicates that we do have VHE, and that the
 	 * kernel is intended to run at EL2.
 	 */
+/*
+   [ID_AA64MMFR1_EL1, AArch64 Memory Model Feature Register 1, EL1]
+   The ID_AA64MMFR1_EL1 provides information about the implemented memory model and memory management support in the AArch64 Execution state. 
+
+    UBFX : 부호 없는 비트 필드 추출. 한 레지스터에 있는 인접 비트를 두 번째 레지스터의 최하위 비트에 복사하고 32비트로 부호 확장 또는 0 확장합니다
+    ID_AA64MMFR1_VHE_SHIFT : 8
+
+*/
 	mrs	x2, id_aa64mmfr1_el1
 	ubfx	x2, x2, #8, #4
 #else
