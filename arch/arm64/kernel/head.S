@@ -46,15 +46,15 @@
 #include "efi-header.S"
 
 /*
- * #define KERNEL_START      _text
- * TEXT_OFFSET := 0x0008000 // 32KB
+ * #define KERNEL_START      _text Make File 에 밸류들이 정의되어 있음.
+ * TEXT_OFFSET := 0x0008000 // 32KB  __PHYS_OFFSET의 밸류를 초기화 함
  */
 
 
 #define __PHYS_OFFSET	(KERNEL_START - TEXT_OFFSET)
 
 #if (TEXT_OFFSET & 0xfff) != 0
-#error TEXT_OFFSET must be at least 4KB aligned
+#error TEXT_OFFSET must be at least 4KB aligned // 특정 밸류와 비교해서 (문법 오류가 아니므로) compile 할 때 에러 메세지를 출력하게함.
 #elif (PAGE_OFFSET & 0x1fffff) != 0
 #error PAGE_OFFSET must be at least 2MB aligned
 #elif TEXT_OFFSET > 0x1fffff
@@ -66,7 +66,7 @@
  * ---------------------------
  *
  * The requirements are:
- *   MMU = off, D-cache = off, I-cache = on or off,
+ *   MMU = off, D-cache(데이터 캐시) = off, I-cache(인스트럭션 캐시) = on or off,
  *   x0 = physical address to the FDT blob.
  *
  * This code is mostly position independent so you call this at
@@ -286,7 +286,7 @@ ENDPROC(preserve_boot_args)
 	populate_entries \tbl, \count, \istart, \iend, \flags, #SWAPPER_BLOCK_SIZE, \tmp
 	.endm
 
-/*
+/* ** map_memory 두 번 하는 이유
  * Setup the initial page tables. We only setup the barest amount which is
  * required to get the kernel running. The following sections are required:
  *   - identity mapping to enable the MMU (low address, TTBR0)
@@ -294,7 +294,7 @@ ENDPROC(preserve_boot_args)
  *     been enabled
  */
 __create_page_tables:
-	mov	x28, lr
+	mov	x28, lr // LR 은 X[30], X[28] 에 저장함.
 
 	/*
 	 * Invalidate the init page tables to avoid potential dirty cache lines
@@ -305,7 +305,7 @@ __create_page_tables:
 	adrp	x0, init_pg_dir
 	adrp	x1, init_pg_end
 	sub	x1, x1, x0
-	bl	__inval_dcache_area
+	bl	__inval_dcache_area // bl X[30] = PC[] + 4
 
 	/*
 	 * Clear the init page tables.
@@ -437,55 +437,222 @@ config ARM64_PA_BITS
 	adr_l	x6, __idmap_text_end		// __pa(__idmap_text_end)
 
 
-/*
- * Map memory for specified virtual address range. Each level of page table needed supports
- * multiple entries. If a level requires n entries the next page table level is assumed to be
- * formed from n pages.
- *
- *	tbl:	location of page table
- *	rtbl:	address to be used for first level page table entry (typically tbl + PAGE_SIZE)
- *	vstart:	start address to map
- *	vend:	end address to map - we map [vstart, vend]
- *	flags:	flags to use to map last level entries
- *	phys:	physical address corresponding to vstart - physical memory is contiguous
- *	pgds:	the number of pgd entries
- *
- * Temporaries:	istart, iend, tmp, count, sv - these need to be different registers
- * Preserves:	vstart, vend, flags
- * Corrupts:	tbl, rtbl, istart, iend, tmp, count, sv
-	.macro map_memory, tbl, rtbl, vstart, vend, flags, phys, pgds, istart, iend, tmp, count, sv
-	add \rtbl, \tbl, #PAGE_SIZE  //  x1 = &idmap_pg_dir + PAGE_SIZE(4K)
-	mov \sv, \rtbl               // x14 = &idmap_pg_dir + PAGE_SIZE(4K)
-	mov \count, #0               // x13 = 0
-	compute_indices \vstart, \vend, #PGDIR_SHIFT, \pgds, \istart, \iend, \count
-	populate_entries \tbl, \rtbl, \istart, \iend, #PMD_TYPE_TABLE, #PAGE_SIZE, \tmp
-	mov \tbl, \sv
-	mov \sv, \rtbl
- */
+	/*
+	
+		*
+		* Map memory for specified virtual address range. Each level of page table needed supports
+		* multiple entries. If a level requires n entries the next page table level is assumed to be
+		* formed from n pages.
+		*
+		*	tbl:	location of page table
+		*	rtbl:	address to be used for first level page table entry (typically tbl + PAGE_SIZE)
+		*	vstart:	start address to map
+		*	vend:	end address to map - we map [vstart, vend]
+		*	flags:	flags to use to map last level entries
+		*	phys:	physical address corresponding to vstart - physical memory is contiguous
+		*	pgds:	the number of pgd entries
+		*
+		* Temporaries:	istart, iend, tmp, count, sv - these need to be different registers
+		* Preserves:	vstart, vend, flags
+		* Corrupts:	tbl, rtbl, istart, iend, tmp, count, sv
+		*
+			.macro map_memory, tbl, rtbl, vstart, vend, flags, phys, pgds, istart, iend, tmp, count, sv
+			add \rtbl, \tbl, #PAGE_SIZE
+			mov \sv, \rtbl
+			mov \count, #0
+			compute_indices \vstart, \vend, #PGDIR_SHIFT, \pgds, \istart, \iend, \count	
+			populate_entries \tbl, \rtbl, \istart, \iend, #PMD_TYPE_TABLE, #PAGE_SIZE, \tmp
+			mov \tbl, \sv  			// X0 = X14
+			mov \sv, \rtbl 			// X4 = X1
+			
+			#if SWAPPER_PGTABLE_LEVELS > 3
+			compute_indices \vstart, \vend, #PUD_SHIFT, #PTRS_PER_PUD, \istart, \iend, \count
+			populate_entries \tbl, \rtbl, \istart, \iend, #PMD_TYPE_TABLE, #PAGE_SIZE, \tmp
+			mov \tbl, \sv
+			mov \sv, \rtbl
+			#endif
+			#if SWAPPER_PGTABLE_LEVELS > 2
+			compute_indices \vstart, \vend, #SWAPPER_TABLE_SHIFT, #PTRS_PER_PMD, \istart, \iend, \count
+			populate_entries \tbl, \rtbl, \istart, \iend, #PMD_TYPE_TABLE, #PAGE_SIZE, \tmp
+			mov \tbl, \sv
+			#endif
+	
+	 */
 
-	map_memory x0, x1, x3, x6, x7, x3, x4, x10, x11, x12, x13, x14
 
-/*
-    x0 : &idmap_pg_dir
-    x1 : x1 = x0 + PAGE_SIZE
-    x3 : __pa(__idmap_text_start)
-    x6 : __pa(__idmap_text_end)
-    x7 : SWAPPER_MM_MMUFLAGS
-    x4 : &idmap_ptrs_per_pgd
-    x10 : Temporaries 
-*/
+	/** compute_indices
+		map_memory 			x0, 		x1, 	x3, 			x6, 			x7, 	x3, 	x4, 	x10, 	x11, 	x12, 	x13, 	x14
+		.macro map_memory, 	tbl, 		rtbl, 	vstart, 		vend, 			flags, 	phys, 	pgds, 	istart, iend, 	tmp, 	count, 	sv
+		compute_indices 	\vstart, 	\vend, #PGDIR_SHIFT, 			\pgds, 			\istart, \iend, \count	
+		#if SWAPPER_PGTABLE_LEVELS > 3
+		compute_indices 	\vstart, 	\vend, #PUD_SHIFT,				#PTRS_PER_PUD, 	\istart, \iend, \count
+		#if SWAPPER_PGTABLE_LEVELS > 2
+		compute_indices 	\vstart, 	\vend, #SWAPPER_TABLE_SHIFT, 	#PTRS_PER_PMD, 	\istart, \iend, \count
+	
+		x0 : &idmap_pg_dir
+		x1 : x0 + PAGE_SIZE
+		x3 : __pa(__idmap_text_start)
+		x6 : __pa(__idmap_text_end)
+		x7 : SWAPPER_MM_MMUFLAGS
+		x4 : &idmap_ptrs_per_pgd
+		
+		x10, x11, x12, x13, x14 -> temp
+		
+		add \rtbl, \tbl, #PAGE_SIZE		->		add x1 x0	->	x1 = &idmap_pg_dir + PAGE_SIZE(4K)
+		mov \sv, \rtbl					-> 		mov x14 x1	->	x14 = &idmap_pg_dir + PAGE_SIZE(4K)
+		*
+		* Compute indices of table entries from virtual address range. If multiple entries
+		* were needed in the previous page table level then the next page table level is assumed
+		* to be composed of multiple pages. (This effectively scales the end index).
+		*
+		*	vstart:	virtual address of start of range
+		*	vend:	virtual address of end of range
+		*	shift:	shift used to transform virtual address into index
+		*	ptrs:	number of entries in page table
+		*	istart:	index in table corresponding to vstart
+		*	iend:	index in table corresponding to vend
+		*	count:	On entry: how many extra entries were required in previous level, scales
+		*			  our end index.
+		*		On exit: returns how many extra entries required for next page table level
+		*
+		* Preserves:	vstart, vend, shift, ptrs
+		* Returns:	istart, iend, count
+		*
+			.macro compute_indices, vstart, vend, shift, ptrs, istarpopulate_entries, iend, count
+			lsr	\iend, \vend, \shift
+			mov	\istart, \ptrs
+			sub	\istart, \istart, #1
+			and	\iend, \iend, \istart	// iend = (vend >> shift) & populate_entriesptrs - 1)
+			mov	\istart, \ptrs
+			mul	\istart, \istart, \count
+			add	\iend, \iend, \istart	// iend += (count - 1) * ptrs
+							// our entries span multiple tables
+			lsr	\istart, \vstart, \shift
+			mov	\count, \ptrs
+			sub	\count, \count, #1
+			and	\istart, \istart, \count
+			sub	\count, \iend, \istart
+			.endm
+	 */
+
+	/** macro populate_entries
+	
+		map_memory 			x0, 	x1, 	x3, 	x6, 	x7, 	x3, 	x4, 	x10, 	x11, 	x12, 	x13, 	x14
+		.macro map_memory, 	tbl, 	rtbl, 	vstart, vend, 	flags, 	phys, 	pgds, 	istart, iend, 	tmp, 	count, 	sv
+		populate_entries \tbl, \rtbl, \istart, \iend, #PMD_TYPE_TABLE, #PAGE_SIZE, \tmp
+		*
+		* Macro to populate page table entries, these entries can be pointers to the next level
+		* or last level entries pointing to physical memory.
+		*
+		*	tbl:	page table address
+		*	rtbl:	pointer to page table or physical memory
+		*	index:	start index to write
+		*	eindex:	end index to write - [index, eindex] written to
+		*	flags:	flags for pagetable entry to or in
+		*	inc:	increment to rtbl between each entry
+		*	tmp1:	temporary variable
+		*
+		* Preserves:	tbl, eindex, flags, inc
+		* Corrupts:	index, tmp1
+		* Returns:	rtbl
+		*
+			* pgd entry를 채워줌.
+			* Entry의 크기가 8바이트 이므로 lsl #3. 
+			.macro populate_entries, tbl, rtbl, index, eindex, flags, inc, tmp1
+			.Lpe\@:	phys_to_pte \tmp1, \rtbl						// Do While
+			orr	\tmp1, \tmp1, \flags	// tmp1 = table entry
+			str	\tmp1, [\tbl, \index, lsl #3]
+			add	\rtbl, \rtbl, \inc	// rtbl = pa next level
+			add	\index, \index, #1
+			cmp	\index, \eindex									// Do While ( LPe : less or equal) Condition
+			b.ls	.Lpe\@
+			.endm
+			.macro	phys_to_pte, pte, phys
+			#ifdef CONFIG_ARM64_PA_BITS_52
+				
+				 * We assume \phys is 64K aligned and this is guaranteed by only
+				 * supporting this configuration with 64K pages.
+				
+				orr	\pte, \phys, \phys, lsr #36
+				and	\pte, \pte, #PTE_ADDR_MASK
+			#else
+				mov	\pte, \phys // ->>>> 이놈으로 선택됨.
+			#endif
+				.endm
+	
+	 */
+
+	// mmu 가 켜지기 전 첫번째 매핑
+
+	map_memory x0, x1, x3, x6, x7, x3, x4, x10, x11, x12, x13, x14  // id 먜핑 
 
 	/*
 	 * Map the kernel image (starting with PHYS_OFFSET).
 	 */
-	adrp	x0, init_pg_dir
-	mov_q	x5, KIMAGE_VADDR + TEXT_OFFSET	// compile time __va(_text)
+	adrp	x0, init_pg_dir // 새로 시작함.
+
+	/*
+	
+		*
+		* mov_q - move an immediate constant into a 64-bit register using
+		*         between 2 and 4 movz/movk instructions (depending on the
+		*         magnitude and sign of the operand)
+		*
+		.macro	mov_q, reg, val
+		.if (((\val) >> 31) == 0 || ((\val) >> 31) == 0x1ffffffff)
+		movz	\reg, :abs_g1_s:\val
+		.else
+		.if (((\val) >> 47) == 0 || ((\val) >> 47) == 0x1ffff)
+		movz	\reg, :abs_g2_s:\val
+		.else
+		movz	\reg, :abs_g3:\val
+		movk	\reg, :abs_g2_nc:\val
+		.endif
+		movk	\reg, :abs_g1_nc:\val
+		.endif
+		movk	\reg, :abs_g0_nc:\val
+		.endm
+	
+		 Value 크기에 따라 인스트럭션을 몇번 사용할지 정함. mov
+		KIMAGE_VADDR : 커널 이미지 시작 가상주소
+		TEXT_OFFSET : Make File 에 정의되어 있음.
+	 */
+
+	mov_q	x5, KIMAGE_VADDR + TEXT_OFFSET	// compile time __va(_text) 
 	add	x5, x5, x23			// add KASLR displacement
+
+	/*
+		#define PTRS_PER_PGD		(1 << (MAX_USER_VA_BITS - PGDIR_SHIFT))
+		PTRS_PER_PGD = (1 << (48 - 39)) = 1 << 9 = 512
+		#ifdef CONFIG_ARM64_USER_VA_BITS_52
+		#define MAX_USER_VA_BITS	52
+		#else
+		#define MAX_USER_VA_BITS	VA_BITS
+		#endif
+	 */
+
 	mov	x4, PTRS_PER_PGD
+
+	/** vmlinux.lds.S
+		. : 현재 주소
+		_end = .; // . = ALIGN(SEGMENT_ALIGN);
+		
+	 */
+
 	adrp	x6, _end			// runtime __pa(_end)
 	adrp	x3, _text			// runtime __pa(_text)
+
+	/*
+		x6 = VA Size
+	 */
 	sub	x6, x6, x3			// _end - _text
+
+	/*
+		Virtual Address 로 매핑함.
+	 */
 	add	x6, x6, x5			// runtime __va(_end)
+
+	// mmu 가 켜진 후 두번째 매핑
 
 	map_memory x0, x1, x5, x6, x7, x3, x4, x10, x11, x12, x13, x14
 
@@ -494,12 +661,20 @@ config ARM64_PA_BITS
 	 * accesses (MMU disabled), invalidate the idmap and swapper page
 	 * tables again to remove any speculatively loaded cache lines.
 	 */
+
 	adrp	x0, idmap_pg_dir
 	adrp	x1, init_pg_end
 	sub	x1, x1, x0
 	dmb	sy
+	
+	/*
+		cache Flush 잘못된 밸류가 읽히지 않도록
+	 */
 	bl	__inval_dcache_area
 
+	/*
+		프로시저가 끝나고 원래 주소로 복귀
+	 */
 	ret	x28
 ENDPROC(__create_page_tables)
 	.ltorg
