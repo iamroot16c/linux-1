@@ -466,32 +466,112 @@ ENTRY(__cpu_setup)
 	ldr x5, #0xbbff440c0400 은 불가함(size over)
 				*/
 	msr	mair_el1, x5
+    /*
+       mair_el1 레지스터 -> attribute (속성)을 8개까지 할당 가능.
+       페이지 엔트리에 3 비트의 인덱스 부분이 존재하는데, 그 attribute index 가
+       mair_el1 레지스터의 각 속성을 가리키게 됨. (모기향 책 39p 참고)
+     */
+
+
 	/*
 	 * Prepare SCTLR
 	 */
 	mov_q	x0, SCTLR_EL1_SET
-	/*
+	
+    /*
+       SCTLR_EL1 -> EL0, EL1 에 대한 시스템 동작을 관리
+     */
+
+    /*
 	 * Set/prepare TCR and TTBR. We use 512GB (39-bit) address range for
 	 * both user and kernel.
 	 */
+
+    /*
+       지금까지 썼던 VA_BITS 는 48 이었는데 뜬금 39?
+       -> 주석을 수정을 안한듯......
+       -> 우리는 VA_BITS == 48 로 보고 진행하기로 함.
+     */
+
 	ldr	x10, =TCR_TxSZ(VA_BITS) | TCR_CACHE_FLAGS | TCR_SMP_FLAGS | \
 			TCR_TG_FLAGS | TCR_KASLR_FLAGS | TCR_ASID16 | \
 			TCR_TBI0 | TCR_A1 | TCR_KASAN_FLAGS
 	tcr_clear_errata_bits x10, x9, x5
 
+    /*
+       TCR 레지스터 설정을 x10 에 대입 (관련 설정에 대한 개략적인 내용은 모기향책 73p 참조)
+       tcr_clear_errata_bits -> FUJITSU HW 에 대한 에러 처리
+     */
+
+
 #ifdef CONFIG_ARM64_USER_VA_BITS_52
 	ldr_l		x9, vabits_user
 	sub		x9, xzr, x9
 	add		x9, x9, #64
+
+/*
+   x9 = vabits_user 의 값
+   ...
+   x9 == #64 - vabits_user 
+
+   t0sz -> 주소 상에서 앞에 있는 0의 개수 ex) 52 bits -> 상위 12 비트가 0, t0sz == 12
+   -> 52bits 의 경우, 해당 값(t0sz 값)이 저장되어 있지 않으므로 여기서 계산.
+
+   48bits 의 경우, idmap_t0sz 에 (64 - 48) (== 상위 0의 개수) 이 저장되어 있으므로
+   idmap_t0sz 에서 그 값을 가져옴.
+ */
+
 #else
 	ldr_l		x9, idmap_t0sz
+
+/*
+   idmap_t0sz 에 저장되어있는 48bits (VA_BITS) 의 t0sz 값(상위 0의 개수) 을 x9 에 넣음.
+ */
+
 #endif
 	tcr_set_t0sz	x10, x9
+
+/*
+   tcr_set_t0sz x10, x9 -> x9 의 0 비트(offset) 부터 6 비트(width) 까지를 떼서, x10에 넣음.
+   근데, 앞에 이미 tcr 설정에 대한 내용이 x10 에 저장되어 있는데, 
+   이걸 왜 또함? 어떤 의미임?
+
+   ****** 추후에 다시 체크해보기로 함. *********
+ */ 
 
 	/*
 	 * Set the IPS bits in TCR_EL1.
 	 */
 	tcr_compute_pa_size x10, #TCR_IPS_SHIFT, x5, x6
+
+/*
+   assembler.h 에 macro 정의되어있음.
+
+	.macro	tcr_compute_pa_size, tcr, pos, tmp0, tmp1
+	mrs	\tmp0, ID_AA64MMFR0_E0L1
+	// Narrow PARange to fit the PS field in TCR_ELx
+    // tmp0 = ID_AA64MMFR0_E0L1 레지스터의 값
+
+    ********************* 다음 모임 때, Ghidra 통해 ID_AA64MMFR0_E0L1 레지스터 값 확인해보기로 함. ***********************
+
+	ubfx	\tmp0, \tmp0, #ID_AA64MMFR0_PARANGE_SHIFT, #3
+    // 특정 비트를 뽑아냄. -> #ID ~ SHIFT 에서부터 #3 만큼을 tmp0에서 뽑아냄.
+    // #ID_ ~ _SHIFT == 0
+	mov	\tmp1, #ID_AA64MMFR0_PARANGE_MAX
+    // #ID ~ MAX == 0x5
+	cmp	\tmp0, \tmp1
+    // cmp -> flag 설정을 함 (C, Z flag  -> C==1 && Z==0), tmp0 - tmp1 < 0 일 때, C(carry flag) 가 증가하므로
+	csel	\tmp0, \tmp1, \tmp0, hi
+    // 설정된 flag 값에 따라서, Hi condition 만족(tmp1 > tmp0 <=> source > destination)시, tmp0 에 tmp1 을 넣고,
+    // 그렇지 않을시, tmp0 에 tmp0 을 넣음.
+	bfi	\tcr, \tmp0, \pos, #3
+    // tmp0 의 0 ~ 2 까지를 tcr 의 pos(== 32) 부터 3만큼 까지에 넣음.
+    // -> tcr 의 32, 33, 34 에 해당 비트를 넣음.
+	.endm
+
+   #TCR 레지스터의 IPS 부분(32 ~ 34) 에 
+ */
+
 #ifdef CONFIG_ARM64_HW_AFDBM
 	/*
 	 * Enable hardware update of the Access Flags bit.
@@ -499,11 +579,18 @@ ENTRY(__cpu_setup)
 	 * via capabilities.
 	 */
 	mrs	x9, ID_AA64MMFR1_EL1
+    // x9 = ID_AA64MMFR1_EL1
 	and	x9, x9, #0xf
+    // and 연산을 통해서 x9의 하위 4비트를 따와서 다시 x9에 대입
 	cbz	x9, 1f
+    // 만일, x9 값이 0라면 label 1 로 분기 (0 일시 not supported 이기 때문.)
 	orr	x10, x10, #TCR_HA		// hardware Access flag update
+    // TCR_HA : TCR 레지스터의 39 번째 bit
+    // x10 에 TCR_HA bit 를 OR 연산한 뒤, x10 에 다시 대입(TCR 추가 설정을 해주는 격.)
 1:
 #endif	/* CONFIG_ARM64_HW_AFDBM */
 	msr	tcr_el1, x10
+    // x10 : 이때까지 설정한 TCR Flag 의 설정 값들 ** TCR : Translation Control Register (가상주소 - 물리주소 맵핑 시, TCR 레지스터의 설정값을 따라감.)
+    // x10 에 저장된 값들을 tcr_el1 레지스터에 저장.
 	ret					// return to head.S
 ENDPROC(__cpu_setup)
