@@ -78,6 +78,7 @@
 	msr	daifclr, #8
 	.endm
 
+	/* Thread info 에 있는 flag 값 에서 비교*/
 	.macro	disable_step_tsk, flgs, tmp
 	tbz	\flgs, #TIF_SINGLESTEP, 9990f
 	mrs	\tmp, mdscr_el1
@@ -271,13 +272,13 @@ alternative_endif
 	 * @tmp: scratch register
 	 */
 	.macro ldr_this_cpu dst, sym, tmp
-	adr_l	\dst, \sym
+	adr_l	\dst, \sym                      // __entry_task 주소값 읽어옴
 alternative_if_not ARM64_HAS_VIRT_HOST_EXTN
-	mrs	\tmp, tpidr_el1
+	mrs	\tmp, tpidr_el1			 // kernel 의 쓰레드id 읽어옴
 alternative_else
 	mrs	\tmp, tpidr_el2
 alternative_endif
-	ldr	\dst, [\dst, \tmp]
+	ldr	\dst, [\dst, \tmp]		// __entry_task 주소 + 쓰레드 id 값에 있는 걸 로드`
 	.endm
 
 /*

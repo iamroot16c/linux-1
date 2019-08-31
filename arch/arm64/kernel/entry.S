@@ -70,6 +70,7 @@
 
 	.macro kernel_ventry, el, label, regsize = 64
 	.align 7
+/* el0 에서 커널로 맵핑 할수 없다. 여러가지 공격 방지 */
 #ifdef CONFIG_UNMAP_KERNEL_AT_EL0
 alternative_if ARM64_UNMAP_KERNEL_AT_EL0
 	.if	\el == 0
@@ -83,6 +84,8 @@ alternative_if ARM64_UNMAP_KERNEL_AT_EL0
 alternative_else_nop_endif
 #endif
 
+	/* sub	sp, sp, #S_FRAME_SIZE
+			S_FRAME_SIZE = 320 sizeof(struct pt_regs) 만큼 스택 할당 받음  */
 	sub	sp, sp, #S_FRAME_SIZE
 #ifdef CONFIG_VMAP_STACK
 	/*
@@ -91,7 +94,7 @@ alternative_else_nop_endif
 	 */
 	add	sp, sp, x0			// sp' = sp + x0
 	sub	x0, sp, x0			// x0' = sp' - x0 = (sp + x0) - x0 = sp
-	tbnz	x0, #THREAD_SHIFT, 0f
+	tbnz	x0, #THREAD_SHIFT, 0f		// THREAD_SHIFT = 14 만큼 bit 비교해서 0이 아니면 0f 로 점프
 	sub	x0, sp, x0			// x0'' = sp' - x0' = (sp + x0) - sp = x0
 	sub	sp, sp, x0			// sp'' = sp' - x0 = (sp + x0) - x0 = sp
 	b	el\()\el\()_\label
@@ -175,9 +178,14 @@ alternative_cb_end
 	stp	x28, x29, [sp, #16 * 14]
 
 	.if	\el == 0
-	clear_gp_regs
+	clear_gp_regs  // 0~29  x0 ~ x29  까지 general purpose register 0으로 클리어
 	mrs	x21, sp_el0
+	/* ldr_this_cpu	tsk, __entry_task, x20	// Ensure MDSCR_EL1.SS is clear,
+			tsk = x28 = __entry_task 주소 + kernel 쓰레드 id 의 위치에 무언가 로드 */
+			/* tsk tread_info 로 가정..? */
 	ldr_this_cpu	tsk, __entry_task, x20	// Ensure MDSCR_EL1.SS is clear,
+	/*ldr	x19, [tsk, #TSK_TI_FLAGS]	// since we can unmask debug
+				TSK_TI_FLAGS 값은 0  task thread info flag */
 	ldr	x19, [tsk, #TSK_TI_FLAGS]	// since we can unmask debug
 	disable_step_tsk x19, x20		// exceptions when scheduling.
 
@@ -429,6 +437,9 @@ tsk	.req	x28		// current thread_info
 
 	.align	11
 ENTRY(vectors)
+	/* kernel_ventry	1, sync_invalid			// Synchronous EL1 */
+	/* el == 1  regsize == 64 */
+	/* */
 	kernel_ventry	1, sync_invalid			// Synchronous EL1t
 	kernel_ventry	1, irq_invalid			// IRQ EL1t
 	kernel_ventry	1, fiq_invalid			// FIQ EL1t

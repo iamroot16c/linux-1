@@ -715,6 +715,10 @@ __primary_switched:
 	bl	kasan_early_init
 #endif
 #ifdef CONFIG_RANDOMIZE_BASE
+	/*tst	x23, ~(MIN_KIMG_ALIGN - 1) tst	~(0x00200000 -1 ) = FFFF FFFF FFE0 0000 */
+					 /* x23 = (PC + __PHY_OFFSET) & 0x1fffff */
+					 /* 항상 0이 아닌가??? */
+					 /* 방어 코드 인것 같음 */
 	tst	x23, ~(MIN_KIMG_ALIGN - 1)	// already running randomized?
 	b.ne	0f
 	mov	x0, x21				// pass FDT address in x0
@@ -725,9 +729,9 @@ __primary_switched:
 	ret					// to __primary_switch()
 0:
 #endif
-	add	sp, sp, #16
-	mov	x29, #0
-	mov	x30, #0
+	add	sp, sp, #16 // sp 원상 복귀
+	mov	x29, #0 
+	mov	x30, #0  // 링커레지스터 bsp 초기화
 	b	start_kernel
 ENDPROC(__primary_switched)
 
