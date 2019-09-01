@@ -79,12 +79,16 @@
 	.endm
 
 	/* Thread info 에 있는 flag 값 에서 비교*/
-	.macro	disable_step_tsk, flgs, tmp
-	tbz	\flgs, #TIF_SINGLESTEP, 9990f
-	mrs	\tmp, mdscr_el1
-	bic	\tmp, \tmp, #DBG_MDSCR_SS
-	msr	mdscr_el1, \tmp
-	isb	// Synchronise with enable_dbg
+	.macro	disable_step_tsk, flgs, tmp		// disable_step_tsk는 flags, tmp 2개인자를 받음
+	tbz	\flgs, #TIF_SINGLESTEP, 9990f		// tbz:Test bit and Branch if Zero compares the value of a test bit with zero
+							// TIF_SINGLESTEP:21로 정의
+							// if (((flags >> #TIF_SINGLESTEP) & 0x01)  == 0 ) goto 9990
+	mrs	\tmp, mdscr_el1				// mrs:monitor debug control system register
+							// tmp = mdscr_el1 , el1의 software step exception의 값을 tmp 넣음
+	bic	\tmp, \tmp, #DBG_MDSCR_SS		// bic: bitwise clear, #define DBG_MDSCR_SS		(1 << 0)
+							// tmp &= ~0x01
+	msr	mdscr_el1, \tmp				// mdscr_el1 = tmp
+	isb	// Synchronise with enable_dbg		// 매크로의 역확은  software stemp exception을 clear
 9990:
 	.endm
 

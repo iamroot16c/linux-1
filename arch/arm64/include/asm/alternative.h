@@ -101,6 +101,7 @@ static inline void apply_alternatives_module(void *start, size_t length) { }
 	.byte \alt_len
 .endm
 
+// 나중에 다시 확인 필요
 .macro alternative_insn insn1, insn2, cap, enable = 1
 	.if \enable
 661:	\insn1

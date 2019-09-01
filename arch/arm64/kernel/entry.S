@@ -133,13 +133,21 @@ alternative_else_nop_endif
 	.endm
 
 	.macro tramp_alias, dst, sym
-	mov_q	\dst, TRAMP_VALIAS
+	mov_q	\dst, TRAMP_VALIAS			// dst = TRAMP_VALIAS
+							// #define TRAMP_VALIAS		(__fix_to_virt(FIX_ENTRY_TRAMP_TEXT))
+							// define __fix_to_virt(x)        (FIXADDR_TOP - ((x) << PAGE_SHIFT))
+							// __fix_to_virt : fixmap 영역에 대한 인덱스로 가상 주소를 알아온다.
+							// FIX_ENTRY_TRAMP_TEXT는 fixed_addresses 인덱스
+							//  FIX_ENTRY_TRAMP_TEXT 의 가상 주소를 얻어와서 dst 넣는다
+
 	add	\dst, \dst, #(\sym - .entry.tramp.text)
+							// dst = dst +  ( sym - .entry.tramp.text )
+							// 나중에 한번 더 확인 필요
 	.endm
 
 	// This macro corrupts x0-x3. It is the caller's duty
 	// to save/restore them if required.
-	.macro	apply_ssbd, state, tmp1, tmp2
+	.macro	apply_ssbd, state, tmp1, tmp2		// security 관련 문제. 추후 확인 필요
 #ifdef CONFIG_ARM64_SSBD
 alternative_cb	arm64_enable_wa2_handling
 	b	.L__asm_ssbd_skip\@
@@ -189,9 +197,9 @@ alternative_cb_end
 	ldr	x19, [tsk, #TSK_TI_FLAGS]	// since we can unmask debug
 	disable_step_tsk x19, x20		// exceptions when scheduling.
 
-	apply_ssbd 1, x22, x23
+	apply_ssbd 1, x22, x23			// seucrity(ssbd) 관련 부분. 나중에 한번 더 확인
 
-	.else
+	.else					// else 부분은 el0 확인 후 다시 확인 필요
 	add	x21, sp, #S_FRAME_SIZE
 	get_current_task tsk
 	/* Save the task's original addr_limit and set USER_DS */
@@ -201,25 +209,32 @@ alternative_cb_end
 	str	x20, [tsk, #TSK_TI_ADDR_LIMIT]
 	/* No need to reset PSTATE.UAO, hardware's already set it to 0 for us */
 	.endif /* \el == 0 */
-	mrs	x22, elr_el1
-	mrs	x23, spsr_el1
-	stp	lr, x21, [sp, #S_LR]
-
+	mrs	x22, elr_el1			// x22 = elr_el1, elr_el1 : exception link register
+	mrs	x23, spsr_el1			// x23 = spsr_el1, spsr_el1 : Saved Program Status Register
+	stp	lr, x21, [sp, #S_LR]		// #S_LR + sp 주소값 = lr,  #S_LR + sp + 8 주소값 = x21   (  DEFINE(S_LR,			offsetof(struct pt_regs, regs[30]));)
+	.else
+						// stack[0x100 / 8] = x22, stack[0x108 / 8 ] = x23
 	/*
-	 * In order to be able to dump the contents of struct pt_regs at the
+	 * In order to be able to dump the contents of struct pt_regs at the  pt_regs는 레지스터 값을 담을 수 있는 구조체
 	 * time the exception was taken (in case we attempt to walk the call
 	 * stack later), chain it together with the stack frames.
 	 */
 	.if \el == 0
-	stp	xzr, xzr, [sp, #S_STACKFRAME]
+	stp	xzr, xzr, [sp, #S_STACKFRAME]	// sp +  #S_STACKFRAME 주소값, sp +  #S_STACKFRAME + 다음 인접 주소값을 각각 0으로 설정
+						// sp [ #S_STACKFRAME ] =0, sp [ #S_STACKFRAME+1 ] = 0
+						// stack[0x130] 
 	.else
-	stp	x29, x22, [sp, #S_STACKFRAME]
+	stp	x29, x22, [sp, #S_STACKFRAME]	// sp +  #S_STACKFRAME 주소값 = x29, sp +  #S_STACKFRAME + 다음 인접 주소값 = x22
+						// sp[ #S_STACKFRAME ] = x29, sp[ #S_STACKFRAME+1 ] = x22
 	.endif
-	add	x29, sp, #S_STACKFRAME
+
+	add	x29, sp, #S_STACKFRAME		// x29 = sp + #S_STACKFRAME
 
 #ifdef CONFIG_ARM64_SW_TTBR0_PAN
+// (PAN : Privieliged Acess Never) : https://kernsec.org/wiki/index.php/Exploit_Methods/Userspace_data_usage 참조
+// 나중에 다시 확인
 	/*
-	 * Set the TTBR0 PAN bit in SPSR. When the exception is taken from
+	 * Set the TTBR0 PAN bit in SPSR. When the exception is taken from 
 	 * EL0, there is no need to check the state of TTBR0_EL1 since
 	 * accesses are always enabled.
 	 * Note that the meaning of this bit differs from the ARMv8.1 PAN
@@ -242,25 +257,40 @@ alternative_else_nop_endif
 1:
 #endif
 
-	stp	x22, x23, [sp, #S_PC]
+	stp	x22, x23, [sp, #S_PC]			// sp [ #S_PC ] = x22, sp [ #S_PC+1 ] = x23
+							// DEFINE(S_PC,			offsetof(struct pt_regs, ARM_pc));
+							// stack[0x100 / 8] = x22, stack[0x108 / 8 ] = x23
+							// pt_regs ? 의 0x20 (0d32)번  0d21(0d33)번 ?
+							
+							// 이전에 아래와 같이 elr, spsr을 x22, x23를 저장했고
+							// x22 = elr_el1, elr_el1 : exception link register
+							// x23 = spsr_el1, spsr_el1 : Saved Program Status Register
+							// 여기에서는
+							// sp + #S_PC = x22 ( elr_el1 ),  sp + #S_PC + 다음 인접 주소 = x23
+							// PC에 x22, x23을 저장...   82페이지 참고
 
 	/* Not in a syscall by default (el0_svc overwrites for real syscall) */
 	.if	\el == 0
-	mov	w21, #NO_SYSCALL
-	str	w21, [sp, #S_SYSCALLNO]
+	mov	w21, #NO_SYSCALL			// w21 = #NO_SYSCALL(-1), #define NO_SYSCALL (-1)
+	str	w21, [sp, #S_SYSCALLNO]			// sp + #S_SYSCALLNO 주소값 = w21 -> 0x118 / 8 = 35
+							// DEFINE(S_SYSCALLNO,		offsetof(struct pt_regs, syscallno));
+							// s32 syscallno =  -1 -> unsigned 로 읽으면 0xFFFFFFFF
+							// SYSCALL로 호출한것이 아니라 EXCEPTION에 호출한것을 의미하기 위해									
 	.endif
 
 	/*
 	 * Set sp_el0 to current thread_info.
 	 */
 	.if	\el == 0
-	msr	sp_el0, tsk
+	msr	sp_el0, tsk				// sp_el0 = tsk, 현재 thread 정보를  el0의 sp에 set
 	.endif
 
 	/* Save pmr */
-alternative_if ARM64_HAS_IRQ_PRIO_MASKING
-	mrs_s	x20, SYS_ICC_PMR_EL1
-	str	x20, [sp, #S_PMR_SAVE]
+	// 5.1 부터 지원
+alternative_if ARM64_HAS_IRQ_PRIO_MASKING	// #define ARM64_HAS_IRQ_PRIO_MASKING		42
+	mrs_s	x20, SYS_ICC_PMR_EL1		// x20 = SYS_ICC_PMR_EL1, #define SYS_ICC_PMR_EL1			sys_reg(3, 0, 4, 6, 0)
+	str	x20, [sp, #S_PMR_SAVE]		// sp + #S_PMR_SAVE = x20,  priority masking register
+						// x20 레지스터에 PMR 값을 저장
 alternative_else_nop_endif
 
 	/*
@@ -268,32 +298,41 @@ alternative_else_nop_endif
 	 *
 	 * x21 - aborted SP
 	 * x22 - aborted PC
-	 * x23 - aborted PSTATE
+	 * x23 - aborted PSTATE		--> ARMV7'S CPSR, Processor State
 	*/
+	// 언제 aborted 되는가? 어디에 사용되는가? 
+	// P83페이지 참조
+	
+	// kernel_entry 마지막 부분
 	.endm
 
 	.macro	kernel_exit, el
 	.if	\el != 0
-	disable_daif
+	disable_daif			// daif -> exception mask bits  
+					// exception mask bit disable ( 0xF )
 
 	/* Restore the task's original addr_limit. */
-	ldr	x20, [sp, #S_ORIG_ADDR_LIMIT]
-	str	x20, [tsk, #TSK_TI_ADDR_LIMIT]
+	ldr	x20, [sp, #S_ORIG_ADDR_LIMIT]			//  x20 = sp + S_ORIG_ADDR_LIMIT,   DEFINE(S_ORIG_ADDR_LIMIT,	offsetof(struct pt_regs, orig_addr_limit));
+	str	x20, [tsk, #TSK_TI_ADDR_LIMIT]			//  tsk + #TSK_TI_ADDR_LIMIT = x20
 
 	/* No need to restore UAO, it will be restored from SPSR_EL1 */
+	// PSTATE.UAO: User Access Override, UAO 비트가 1이면 EL1에서 실행된 unpriviliged instruction load/store 
+	// EL2는 hypervisor에서는 불려지는 경우.... 나중에 별도로 확인 필요
 	.endif
 
 	/* Restore pmr */
+	// priority masking register, ARM64_HAS_IRQ_PRIO_MASKING -> 42
 alternative_if ARM64_HAS_IRQ_PRIO_MASKING
-	ldr	x20, [sp, #S_PMR_SAVE]
-	msr_s	SYS_ICC_PMR_EL1, x20
+	ldr	x20, [sp, #S_PMR_SAVE]			// x20 = sp + #S_PMR_SAVE loading,  DEFINE(S_PMR_SAVE,		offsetof(struct pt_regs, pmr_save));
+	msr_s	SYS_ICC_PMR_EL1, x20			// SYS_ICC_PMR_EL1 = x20, #define SYS_ICC_PMR_EL1			sys_reg(3, 0, 4, 6, 0)
 	/* Ensure priority change is seen by redistributor */
 	dsb	sy
 alternative_else_nop_endif
 
 	ldp	x21, x22, [sp, #S_PC]		// load ELR, SPSR
+							//  x21 = sp [ #S_PC ], x22 = sp [ #S_PC + 1]
 	.if	\el == 0
-	ct_user_enter
+	ct_user_enter					// default -> disable 되어 있음
 	.endif
 
 #ifdef CONFIG_ARM64_SW_TTBR0_PAN
@@ -302,6 +341,7 @@ alternative_else_nop_endif
 	 * PAN bit checking.
 	 */
 alternative_if ARM64_HAS_PAN
+	// #define ARM64_HAS_PAN				4
 	b	2f				// skip TTBR0 PAN
 alternative_else_nop_endif
 
@@ -329,9 +369,12 @@ alternative_else_nop_endif
 
 	.if	\el == 0
 	ldr	x23, [sp, #S_SP]		// load return stack pointer
-	msr	sp_el0, x23
+						// x23 = sp + #S_SP
+	msr	sp_el0, x23			// sp_el0 = x23
 	tst	x22, #PSR_MODE32_BIT		// native task?
-	b.eq	3f
+						// #define PSR_MODE32_BIT		0x00000010
+						// if ( (x22 & 0x10 ) != 0 )
+	b.eq	3f				// true면 3f
 
 #ifdef CONFIG_ARM64_ERRATUM_845719
 alternative_if ARM64_WORKAROUND_845719
@@ -344,11 +387,11 @@ alternative_if ARM64_WORKAROUND_845719
 alternative_else_nop_endif
 #endif
 3:
-	apply_ssbd 0, x0, x1
+	apply_ssbd 0, x0, x1			// security 부분.... skip...
 	.endif
 
 	msr	elr_el1, x21			// set up the return data
-	msr	spsr_el1, x22
+	msr	spsr_el1, x22			// 복귀를 위해 레지스터들을 복원
 	ldp	x0, x1, [sp, #16 * 0]
 	ldp	x2, x3, [sp, #16 * 1]
 	ldp	x4, x5, [sp, #16 * 2]
@@ -370,10 +413,11 @@ alternative_else_nop_endif
 	.if	\el == 0
 alternative_insn eret, nop, ARM64_UNMAP_KERNEL_AT_EL0
 #ifdef CONFIG_UNMAP_KERNEL_AT_EL0
+	// default값 -> y
 	bne	4f
-	msr	far_el1, x30
-	tramp_alias	x30, tramp_exit_native
-	br	x30
+	msr	far_el1, x30				// far_el1 = x30
+	tramp_alias	x30, tramp_exit_native		// x30 = tramp_exit_native 주소를 넣음
+	br	x30					// x30 branch
 4:
 	tramp_alias	x30, tramp_exit_compat
 	br	x30
@@ -988,15 +1032,16 @@ alternative_else_nop_endif
 	.endm
 
 	.macro tramp_unmap_kernel, tmp
-	mrs	\tmp, ttbr1_el1
-	sub	\tmp, \tmp, #(PAGE_SIZE + RESERVED_TTBR0_SIZE)
-	orr	\tmp, \tmp, #USER_ASID_FLAG
-	msr	ttbr1_el1, \tmp
+	mrs	\tmp, ttbr1_el1						// tmp = ttbr1_el1
+	sub	\tmp, \tmp, #(PAGE_SIZE + RESERVED_TTBR0_SIZE)		// tmp -= #(PAGE_SIZE + RESERVED_TTBR0_SIZE)
+	orr	\tmp, \tmp, #USER_ASID_FLAG				// tmp |= #USER_ASID_FLAG
+	msr	ttbr1_el1, \tmp						// ttbr1_el1 = tmp
 	/*
 	 * We avoid running the post_ttbr_update_workaround here because
 	 * it's only needed by Cavium ThunderX, which requires KPTI to be
 	 * disabled.
 	 */
+	 // post_ttbr_update_workaround 나올때 다시 확인 필요
 	.endm
 
 	.macro tramp_ventry, regsize = 64
@@ -1029,14 +1074,14 @@ alternative_insn isb, nop, ARM64_WORKAROUND_QCOM_FALKOR_E1003
 	.endm
 
 	.macro tramp_exit, regsize = 64
-	adr	x30, tramp_vectors
-	msr	vbar_el1, x30
-	tramp_unmap_kernel	x30
+	adr	x30, tramp_vectors			// x30 = tramp_vectors
+	msr	vbar_el1, x30				// vbar_el1 = x30, vbar_el1 = tramp_vectors 주소
+	tramp_unmap_kernel	x30			// 추후 다시 확인
 	.if	\regsize == 64
-	mrs	x30, far_el1
+	mrs	x30, far_el1				// x30 = far_el1
 	.endif
-	eret
-	sb
+	eret						// Exception return using current ELR and SPSR
+	sb						// sepculation barrier 
 	.endm
 
 	.align	11
