@@ -547,8 +547,12 @@ asmlinkage __visible void __init start_kernel(void)
 	char *command_line;
 	char *after_dashes;
 
+    // init_task 기준에서 stack 끝주소에 MAGIC 값을 넣어줌
 	set_task_stack_end_magic(&init_task);
+    // MPIDR 레지스트리에 저장된 physical cpu ID를 읽어 로지컬 뱀(logical ma야에 저장한다.
 	smp_setup_processor_id();
+    // obj_hash 구조체 배열과 obj_static_pool 구조체 배열을 초기화
+    // 문의사항 : 주석내에 "the static object pool objects into the poll list" 에서 poll list가 오타인가? 아니면 다른 poll list가 있는 것인가?
 	debug_objects_early_init();
 
 	cgroup_init_early();

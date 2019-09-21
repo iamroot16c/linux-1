@@ -22,6 +22,18 @@
 #include <asm/cmpxchg.h>
 #include <asm/stack_pointer.h>
 
+/*
+ * [asm 사용법]
+ * asm [volatile] ( AssemblerTemplate : OutputOperands [ : InputOperands
+                      [ : Clobbers ] ])
+ * AssemblerTemplate : ALTERNATIVE("msr tpidr_el1, %0", "msr tpidr_el2, %0", ARM64_HAS_VIRT_HOST_EXTN)
+ *
+ * OutputOperands : 없음
+ * InputOperands : "r" (off)   =>  c-expression 을 어셈에 쓸 수있음.
+ * Clobbers : "memory"  => 컴파일러에게 어셈블리 코드가 메모리 접근을 한다고 말해주는 것
+ *
+ * ALTERNATIVE 는 컴파일 타임에 실행할 명령(old-instruction)을 준비하고, 조건에 따라 기존 명령을 새 명령(new-instruction)으로 대체시켜 동작시키는 기법
+ */
 static inline void set_my_cpu_offset(unsigned long off)
 {
 	asm volatile(ALTERNATIVE("msr tpidr_el1, %0",
