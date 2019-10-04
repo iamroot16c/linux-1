@@ -10,6 +10,15 @@
 static inline int preempt_count(void)
 {
 	return READ_ONCE(current_thread_info()->preempt.count);
+/*
+    READ_ONCE:
+        최적화를 방지하고
+        매크로에 전달된 인자의 메모리 주소를 atomic하게 읽음
+
+        atomic operation:
+            공유 자원에 대해 멀티 프로세서 및 멀티 스레드가 동시에 경쟁적으로
+            요청 시 조작(Operation)이 한 번에 하나씩 동작하여 그 중간에 끼어 들 수 없도록 한다.
+ */
 }
 
 static inline void preempt_count_set(u64 pc)

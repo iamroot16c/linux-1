@@ -71,6 +71,9 @@ static inline unsigned long arch_local_save_flags(void)
 	unsigned long flags;
 
 	daif_bits = read_sysreg(daif);
+/*
+    DAIF, Interrupt Mask Bits
+ */
 
 	/*
 	 * The asm is logically equivalent to:
