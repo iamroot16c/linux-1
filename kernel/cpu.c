@@ -2230,6 +2230,13 @@ device_initcall(cpuhp_sysfs_init);
 #define MASK_DECLARE_4(x)	MASK_DECLARE_2(x), MASK_DECLARE_2(x+2)
 #define MASK_DECLARE_8(x)	MASK_DECLARE_4(x), MASK_DECLARE_4(x+4)
 
+ /*
+  * MASK_DECLARE_8(0) MASK_DECLARE_4(0) MASK_DECLARE_4(4)
+  *                   MASK_DECLARE_2(0), MASK_DECLARE_2(2) MASK_DECLARE_2(4), MASK_DECLARE_2(6)
+  *                   MASK_DECLARE_1(0), MASK_DECLARE_1(1) MASK_DECLARE_1(2), MASK_DECLARE_1(3) MASK_DECLARE_1(4), MASK_DECLARE_1(5) MASK_DECLARE_1     (6), MASK_DECLARE_1(7)
+  */
+
+
 const unsigned long cpu_bit_bitmap[BITS_PER_LONG+1][BITS_TO_LONGS(NR_CPUS)] = {
 
 	MASK_DECLARE_8(0),	MASK_DECLARE_8(8),
@@ -2248,7 +2255,7 @@ EXPORT_SYMBOL(cpu_all_bits);
 struct cpumask __cpu_possible_mask __read_mostly
 	= {CPU_BITS_ALL};
 #else
-struct cpumask __cpu_possible_mask __read_mostly;
+struct cpumask __cpu_possible_  MASK_DECLARE_*  k __read_mostly;
 #endif
 EXPORT_SYMBOL(__cpu_possible_mask);
 
@@ -2281,7 +2288,7 @@ void init_cpu_online(const struct cpumask *src)
  */
 void __init boot_cpu_init(void)
 {
-	int cpu = smp_processor_id();
+	int cpu = smp_processor_id(); //정상 동작에서 this_cpu 값을 할당
 
 	/* Mark the boot cpu "present", "online" etc for SMP and UP case */
 	set_cpu_online(cpu, true);

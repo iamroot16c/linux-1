@@ -853,12 +853,20 @@ static inline int __check_is_bitmap(const unsigned long *bitmap)
  */
 extern const unsigned long
 	cpu_bit_bitmap[BITS_PER_LONG+1][BITS_TO_LONGS(NR_CPUS)];
+// NR_CPUS : config에 있음.  지원되는 최대  CPU 수 
+// BITS_TO_LONGS : long 의 bit 수와 비교해보아서, 몇개의 long 수가 필요할지 리턴
+// BITS_PER_LONG : long type의 bit 수 (64) 
+// cpu_bit_bitmap[64+1][최대 CPU 수를 지원하기 위해 필요한 bit 수를 만족할 수 있는 long 갯수]
+//
+// Ex. core 수 100 개; 64 bit + 36bit이 필요하므로 long 2개 필요 
+// cpu_bit_bitmap[64+1][2]
 
-static inline const struct cpumask *get_cpu_mask(unsigned int cpu)
+// kernel/cpu.c 내 const unsigned long cpu_bit_bitmap 및 MASK_DECLARE_* 참고 
+static inline const struct cpumask *get_cpu_mask(unsigned int cpu) //cpu = 99
 {
-	const unsigned long *p = cpu_bit_bitmap[1 + cpu % BITS_PER_LONG];
-	p -= cpu / BITS_PER_LONG;
-	return to_cpumask(p);
+	const unsigned long *p = cpu_bit_bitmap[1 + cpu % BITS_PER_LONG]; // cpu_bit_bitmap[36][0]
+	p -= cpu / BITS_PER_LONG; // p = p - 1; (long type의 크기만큼 주소 앞으로 이동), 즉, cpu_bit_bitmap[35][1]
+	return to_cpumask(p); // long type을 struct cpumask 타입으로 캐스팅
 }
 
 #define cpu_is_offline(cpu)	unlikely(!cpu_online(cpu))

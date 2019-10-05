@@ -159,8 +159,8 @@ do {						\
 #define irqs_disabled()					\
 	({						\
 		unsigned long _flags;			\
-		raw_local_save_flags(_flags);		\
-		raw_irqs_disabled_flags(_flags);	\
+		raw_local_save_flags(_flags);	    /* irq mask 설정(조건에 따라 interrupt를 mask) */	\
+		raw_irqs_disabled_flags(_flags);	/* 앞서 설정된 값을 register에 업데이트 */\
 	})
 #else /* !CONFIG_TRACE_IRQFLAGS_SUPPORT */
 #define irqs_disabled()	raw_irqs_disabled()

@@ -51,8 +51,12 @@ unsigned int check_preemption_disabled(const char *what1, const char *what2)
         해석을 하지 않아도 문맥을 이해할 수 있는 것으로 보여서
         나중에 다시 보는 것으로 합의
  */
+    //preempt_count는 현재 쓰레드의 preempt count 수를 return 함.
+
 	if (irqs_disabled())
 		goto out;
+    // PMR(Priority Mask Register count) 에 설정된 값 보다 작은 priority의 interrupt가 실행 되지 못하도록 mask. daif bit에서 I flag를 set 하여 mask 함.
+
 
 	/*
 	 * Kernel threads bound to a single CPU can safely use
@@ -60,20 +64,29 @@ unsigned int check_preemption_disabled(const char *what1, const char *what2)
 	 */
 	if (cpumask_equal(&current->cpus_allowed, cpumask_of(this_cpu)))
 		goto out;
+    // cpumask_equal : 현재 사용되고 있는 CPU가, 현재 task가 사용할 수 있는 cpu 인지 확인
+    //
+    // cpumask_of(this_cpu) : this_cpu의 cpu id를 cpumask 비트맵 형식으로 set 해서 저장함
+    // cpus_allowed : (do_set_cpu_allowed) current task (thread) 의 task 정보 중 cpumask struct type의 멤버
+    //                task가 운영될 수 있는 cpu 정보가 저장되어 있음 
+    //                (ref : http://jake.dothome.co.kr/sched_init, do_set_cpus_allowed() )
 
 	/*
 	 * It is valid to assume CPU-locality during early bootup:
 	 */
 	if (system_state < SYSTEM_SCHEDULING)
 		goto out;
+    // system이 booting state에 있는지 확인한다. 
 
 	/*
 	 * Avoid recursion:
 	 */
 	preempt_disable_notrace();
+    //현재 실행중인  쓰레드의 preempt_count에 1을 더해서, 다른 쓰레드가 선점할 수 없도록 함
 
 	if (!printk_ratelimit())
 		goto out_enable;
+    // 커널 로그 메시지가 5초에 10개 이상 나오지 못하도록 제한.
 
 	printk(KERN_ERR "BUG: using %s%s() in preemptible [%08x] code: %s/%d\n",
 		what1, what2, preempt_count() - 1, current->comm, current->pid);
@@ -83,6 +96,7 @@ unsigned int check_preemption_disabled(const char *what1, const char *what2)
 
 out_enable:
 	preempt_enable_no_resched_notrace();
+    //현재 쓰레드의 preempt count 수를 줄임.
 out:
 	return this_cpu;
 }
