@@ -282,11 +282,25 @@ u64 __cpu_logical_map[NR_CPUS] = { [0 ... NR_CPUS-1] = INVALID_HWID };
 
 void __init setup_arch(char **cmdline_p)
 {
+	/*
+	   <include/linux/mm_types.h>에 init_mm의 원래 구조체에 해당하는 mm_strcut 구조체가 정의되어 있고, 
+	   421번째 line에 start_code, end_code, end_data가 정의되어 있으며,
+	   422번째 line에 brk가 정의되어 있음.
+	 */
+	
+	/*
+	   <arch/arm64/kernel/vmlinux.lds.S>에 _text에 해당하는 내용이 나와있음.
+	   (데이터가 저장되는 메모리 주소를 참조할 수 있게끔 지정해주는 역할을 함.)
+	   ex) _text ~ _etext에 해당하는 주소공간에 .text에 해당하는 내용이 저장됨.
+	 */
 	init_mm.start_code = (unsigned long) _text;
 	init_mm.end_code   = (unsigned long) _etext;
 	init_mm.end_data   = (unsigned long) _edata;
 	init_mm.brk	   = (unsigned long) _end;
 
+	/*
+	   boot_command_line은 2048개의 원소를 갖는 배열임.
+	 */
 	*cmdline_p = boot_command_line;
 
 	early_fixmap_init();
