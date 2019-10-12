@@ -2291,12 +2291,19 @@ void __init boot_cpu_init(void)
 	int cpu = smp_processor_id(); //정상 동작에서 this_cpu 값을 할당
 
 	/* Mark the boot cpu "present", "online" etc for SMP and UP case */
+  // cpu_possible_mask - 해당 비트에 대한 CPU가 존재할 수 있다. */
+  // cpu_present_mask - 해당 비트에 대한 CPU가 존재한다. */
+  // cpu_online_mask - 해당 비트에 대한 CPU가 존재하며 스케줄러가 이를 관리한다. */
+  // cpu_active_mask - 해당 비트에 대한 CPU가 존재하며 task migration 시 이를 이용할 수 있다. */
+  // 참고로 CPU hotplug가 활성화되지 않은 환경이라면 present == possible이고 active == oneline이다. */
+  //  include/linux/cpumask.h 의 50번째 라인에 자세한 설명이 있습니다.
 	set_cpu_online(cpu, true);
 	set_cpu_active(cpu, true);
 	set_cpu_present(cpu, true);
 	set_cpu_possible(cpu, true);
-
+// 결과적으로 각 bitmap 에 0번째 bit 가 flagging된다.
 #ifdef CONFIG_SMP
+	// boot_cpu_id = 0; 로 수렴할 것이다.
 	__boot_cpu_id = cpu;
 #endif
 }

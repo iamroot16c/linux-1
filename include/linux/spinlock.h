@@ -318,6 +318,9 @@ static __always_inline raw_spinlock_t *spinlock_check(spinlock_t *lock)
 	return &lock->rlock;
 }
 
+// spinlock_check 는 맞는 typecheck 확인용 (컴파일 타임)
+// https://junsoolee.gitbook.io/linux-insides-ko/summary/syncprim/linux-sync-1
+// spinlock_t 안의 rlock 을 리턴하여. 있는지 단순 확인용
 #define spin_lock_init(_lock)				\
 do {							\
 	spinlock_check(_lock);				\

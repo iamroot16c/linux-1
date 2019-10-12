@@ -13,7 +13,11 @@
 
 static inline void set_bit(unsigned int nr, volatile unsigned long *p)
 {
+	// nr / sizeof(long)*8 을 하여 long배열 인자를 가르키는 포인터를 증가시킴
+	// 예를 들어 70/60=1 이면p+=1; 이 되어  p[1]에 접근하게됨. 
 	p += BIT_WORD(nr);
+	// nr % sizeof(long)*8 을 하여 가르켯던 long에서 직접 플래그할 bit를 선택하여
+	// atomic operation으로 or연산을 수행
 	atomic_long_or(BIT_MASK(nr), (atomic_long_t *)p);
 }
 

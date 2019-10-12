@@ -566,7 +566,7 @@ asmlinkage __visible void __init start_kernel(void)
 	 */
 	boot_cpu_init();
 	page_address_init();
-	pr_notice("%s", linux_banner);
+	pr_notice("%s", linux_banner); // <- 2019,10,12 Jinwoo Park s
 	setup_arch(&command_line);
 	/*
 	 * Set up the the initial canary and entropy after arch

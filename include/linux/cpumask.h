@@ -308,6 +308,8 @@ extern int cpumask_next_wrap(int n, const struct cpumask *mask, int start, bool 
  */
 static inline void cpumask_set_cpu(unsigned int cpu, struct cpumask *dstp)
 {
+	// setmask_check : NR_CPU BIT 맵을 미리 설정한 것보다 크고 작은 관계에의해서 컴파일 타임에 경고 발생 -- 결과적으로 CPU 인자를 반환한다.
+	// cpumask_bits : cpumask * 의 long 배열로 된 bits를 반환한다 (현재 제대로 파고들지는 못했습니다.)
 	set_bit(cpumask_check(cpu), cpumask_bits(dstp));
 }
 
@@ -810,6 +812,9 @@ static inline void
 set_cpu_online(unsigned int cpu, bool online)
 {
 	if (online)
+		// bit mask 에서 long[] |= 0x1 << cpu;
+		// 이 함수는 atomic 오퍼레이션으로서 작동되며
+		// long 배열 혹은 하나를 1<<값을 or 연산 해준다.
 		cpumask_set_cpu(cpu, &__cpu_online_mask);
 	else
 		cpumask_clear_cpu(cpu, &__cpu_online_mask);

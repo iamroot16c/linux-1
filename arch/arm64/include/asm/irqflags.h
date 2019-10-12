@@ -77,13 +77,18 @@ static inline unsigned long arch_local_save_flags(void)
 
 	/*
 	 * The asm is logically equivalent to:
-	 *
-	 * if (system_uses_irq_prio_masking())
+	 * // icc_pmr 인터럽트 우선순위에 따라 허락하고 비허락 하게 할 수 있음 (?) 
+	 * if system_uses_irq_prio_masking()) 
 	 *	flags = (daif_bits & PSR_I_BIT) ?
 	 *			GIC_PRIO_IRQOFF :
-	 *			read_sysreg_s(SYS_ICC_PMR_EL1);
+	 *			read_sysreg_s(SYS_ICC_PMR_EL1);  
 	 * else
 	 *	flags = daif_bits;
+	 *	irq prio마스킹을 사용하면
+	 *		I flag 사용된 시에 -> flags = GIC_PRIO_IRQOFF;
+	 *		I flag 세팅안된 경우 : ICC_의 값을리턴
+	 *	irq_prio 마스킹을 사용 안하면
+	 *		flags = daif_bits
 	 */
 	asm volatile(ALTERNATIVE(
 			"mov	%0, %1\n"

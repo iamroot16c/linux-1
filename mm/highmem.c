@@ -474,8 +474,11 @@ done:
 void __init page_address_init(void)
 {
 	int i;
-
+	// ARRAY_SIZE 는 배열의 ELEMENT갯수를 구한다.
+	// page_address_htable = 128개의 element
+	// 여기서 채용하는 구조는 double linked list이다.
 	for (i = 0; i < ARRAY_SIZE(page_address_htable); i++) {
+		// double linked list 의 next , prev를 자기자신으로 적어준다.
 		INIT_LIST_HEAD(&page_address_htable[i].lh);
 		spin_lock_init(&page_address_htable[i].lock);
 	}
