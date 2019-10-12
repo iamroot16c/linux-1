@@ -795,15 +795,43 @@ static inline pte_t * fixmap_pte(unsigned long addr)
  * lm_alias so __p*d_populate functions must be used to populate with the
  * physical address from __pa_symbol.
  */
+
+/*
+   Fixmap: 컴파일 타임에 가상 주소가 결정(fix)되는 공간으로, vmap 등 서브 시스템이 활성화되기 이전에 사용되는 매핑 방법
+   -> 실제 6M 정도 크기의 가상 주소 공간이 커널 메모리 매핑이 이루어지기 이전에 미리 할당되어 있다.
+ */
 void __init early_fixmap_init(void)
 {
 	pgd_t *pgdp, pgd;
 	pud_t *pudp;
 	pmd_t *pmdp;
+	/*
+	   <arch/arm64/include/asm/pgtable-types.h>에 pgd_t 등에 대한 설명이 있음.
+	   -> pgd_t는 u64형의 pgd가 정의되어있는 구조체
+	 */
+	
 	unsigned long addr = FIXADDR_START;
+	/*
+	   <arch/arm64/include/asm/fixmap.h>에 FIXADDR_START == (FIXADDR_TOP - FIXADDR_SIZE) 부터 시작해서
+	   각종 매크로를 따라 들어갈 수 있음.
+	   의미적으로 addr 변수에 Fixmap이 시작되는 주소를 대입한다고만 확인.
+	 */
 
 	pgdp = pgd_offset_k(addr);
+	/*
+	   <arch/arm64/include/asm/pgtable.h>
+	   
+	   #define pgd_offset_k(addr)	pgd_offset(&init_mm, addr)
+	   #define pgd_offset(mm, addr)	(pgd_offset_raw((mm)->pgd, (addr)))
+	   #define pgd_offset_raw(pgd, addr)	((pgd) + pgd_index(addr))
+	   #define pgd_index(addr)	(((addr) >> PGDIR_SHIFT) & (PTRS_PER_PGD - 1))
+	 */
+	
 	pgd = READ_ONCE(*pgdp);
+	/*
+ 	   pgdp가 가리키는 값(pgd table의 엔트리)을 읽어서 pgd에 대입
+	 */
+	
 	if (CONFIG_PGTABLE_LEVELS > 3 &&
 	    !(pgd_none(pgd) || pgd_page_paddr(pgd) == __pa_symbol(bm_pud))) {
 		/*
