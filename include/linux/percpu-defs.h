@@ -214,6 +214,24 @@
  * + 0 is required in order to convert the pointer type from a
  * potential array type to a pointer to a single item of the array.
  */
+
+/* [20190928]
+ *
+ * __percpu
+ * sparse(커널소스 분석도구)에서 잘못된 주소 사용을 체크하기 위해 사용한다.
+ * __percpu를 사용하면 일반 커널주소가 아니라
+ * per-cpu에서 사용하는 주소여야 한다는 것을 의미한다.
+ *
+ * include/linux/compiler_types.h에 다음과 같이 정의되어 있다.
+ *
+ * #ifdef __CHECKER__ <--- sparse에서 정의하는 매크로
+ * # define __percpu	__attribute__((noderef, address_space(3)))
+ *
+ * __verify_pcpu_ptr(ptr)
+ * NULL을 ptr의 타입으로 cast 하므로 ptr 타입이 __percpu 영역을 가리키는
+ * 임의의 포인터가 아니라면 sparse에서 warning이 난다.
+ */
+
 #define __verify_pcpu_ptr(ptr)						\
 do {									\
 	const void __percpu *__vpp_verify = (typeof((ptr) + 0))NULL;	\

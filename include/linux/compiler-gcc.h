@@ -51,6 +51,14 @@
  * the inline assembly constraint from =g to =r, in this particular
  * case either is valid.
  */
+
+/* [20190928]
+ * per-cpu 영역은 kernel image상에 1 set의 데이터만 포함되어 있지만
+ * 실행 시에 이를 CPU 수만큼 복제하여 할당한다.
+ * 따라서 포인터가 가리키는 객체의 크기를 넘어가는 영역에 접근하게 되는데
+ * 컴파일러가 이 부분을 오류상황으로 감지하여 의도와 다르게 최적화 할 수 있다.
+ * 이를 막기 위하여 gcc가 최적화를 하지 못하도록 inline assembly를 사용한다.
+ */
 #define RELOC_HIDE(ptr, off)						\
 ({									\
 	unsigned long __ptr;						\

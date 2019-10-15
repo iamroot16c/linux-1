@@ -51,6 +51,41 @@ DECLARE_PER_CPU_READ_MOSTLY(int, cpu_number);
  * And we can't use this_cpu_ptr() either, as that winds up recursing back
  * here under CONFIG_DEBUG_PREEMPT=y.
  */
+
+/* [20190928]
+ *
+ * 1. cpu_number
+ * arch/arm64/kernel/smp.c에 다음과 같이 정의(메모리 할당)되어 있다
+ * DEFINE_PER_CPU_READ_MOSTLY(int, cpu_number);
+ *
+ * 그리고 현재 파일 45줄에 다음과 같이 선언(데이터 참조)되어 있다
+ * DECLARE_PER_CPU_READ_MOSTLY(int, cpu_number);
+ *
+ * 두 매크로
+ * include/linux/percpu-defs.h에 다음과 같이 define 되어 있다.
+ *
+ * #define DECLARE_PER_CPU_READ_MOSTLY(type, name)			\
+ *	   DECLARE_PER_CPU_SECTION(type, name, "..read_mostly")
+ *
+ * #define DEFINE_PER_CPU_READ_MOSTLY(type, name)				\
+ *     DEFINE_PER_CPU_SECTION(type, name, "..read_mostly")
+ *
+ * #define DECLARE_PER_CPU_SECTION(type, name, sec)			\
+ *	   extern __PCPU_ATTRS(sec) __typeof__(type) name
+ *
+ * #define DEFINE_PER_CPU_SECTION(type, name, sec)				\
+ *	   __PCPU_ATTRS(sec) __typeof__(type) name
+ *
+ * 2. raw_smp_processor_id()
+ * include/linux/smp.h에 다음과 같이 define 되어 있다.
+ * #ifdef CONFIG_SMP
+ *   #include <asm/smp.h> <--- 현재 파일
+ * #else
+ *   #define raw_smp_processor_id() 0
+ * #endif
+ *
+ */
+
 #define raw_smp_processor_id() (*raw_cpu_ptr(&cpu_number))
 
 struct seq_file;

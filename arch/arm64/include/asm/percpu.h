@@ -42,6 +42,10 @@ static inline void set_my_cpu_offset(unsigned long off)
 			:: "r" (off) : "memory");
 }
 
+/* [20190928]
+ * "Q"의 의미: ARM에서는 메모리 영역을 access 할 경우
+ * clobber lists에서 "memory" 대신 "Q"를 사용한다.
+ */
 static inline unsigned long __my_cpu_offset(void)
 {
 	unsigned long off;

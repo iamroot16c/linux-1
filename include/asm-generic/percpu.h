@@ -40,6 +40,15 @@ extern unsigned long __per_cpu_offset[NR_CPUS];
  * Arch may define arch_raw_cpu_ptr() to provide more efficient address
  * translations for raw_cpu_ptr().
  */
+
+/* [20190928]
+ * __my_cpu_offset
+ * arch/arm64/include/asm/percpu.h에 define 되어 있음
+ * static inline unsigned long __my_cpu_offset(void)
+ * {
+ * }
+ * #define __my_cpu_offset __my_cpu_offset()
+ */
 #ifndef arch_raw_cpu_ptr
 #define arch_raw_cpu_ptr(ptr) SHIFT_PERCPU_PTR(ptr, __my_cpu_offset)
 #endif
