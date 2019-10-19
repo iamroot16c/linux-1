@@ -832,6 +832,7 @@ void __init early_fixmap_init(void)
  	   pgdp가 가리키는 값(pgd table의 엔트리)을 읽어서 pgd에 대입
 	 */
 	
+    // pgd_none : pgd == NULL 이면 true.
 	if (CONFIG_PGTABLE_LEVELS > 3 &&
 	    !(pgd_none(pgd) || pgd_page_paddr(pgd) == __pa_symbol(bm_pud))) {
 		/*
@@ -847,7 +848,7 @@ void __init early_fixmap_init(void)
 		pudp = fixmap_pud(addr);
 	}
 	if (pud_none(READ_ONCE(*pudp)))
-		__pud_populate(pudp, __pa_symbol(bm_pmd), PMD_TYPE_TABLE);
+		__pud_populate(pudp, __pa_symbol(bm_pmd), PMD_TYPE_TABLE); //< 20191019 1차 스터디 진도.
 	pmdp = fixmap_pmd(addr);
 	__pmd_populate(pmdp, __pa_symbol(bm_pte), PMD_TYPE_TABLE);
 

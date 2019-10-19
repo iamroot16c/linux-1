@@ -524,6 +524,8 @@ static inline void set_pud(pud_t *pudp, pud_t pud)
 
 	WRITE_ONCE(*pudp, pud);
 
+    // ish : 내부 공유 영역에 대해 배리어되어 완료시까지 기다림
+    // st : 오직 저장(store) 명령만 배리어되어 완료시까지 기다림 
 	if (pud_valid(pud))
 		dsb(ishst);
 }
