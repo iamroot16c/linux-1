@@ -76,12 +76,16 @@ void __init early_ioremap_setup(void)
 {
 	int i;
 
-	for (i = 0; i < FIX_BTMAPS_SLOTS; i++)
-		if (WARN_ON(prev_map[i]))
+	for (i = 0; i < FIX_BTMAPS_SLOTS; i++) // FIX_BTMAPS_SLOTS = 7
+		if (WARN_ON(prev_map[i])) // voide pointer 배열에 초기화 안된 경우 warning 발생함. 
 			break;
-
+	
+	/*
+	 * FIX_BTMAP_END = __end_of_permanent_fixed_addresses,
+	 * FIX_BTMAP_BEGIN = FIX_BTMAP_END + TOTAL_FIX_BTMAPS - 1,
+	 */
 	for (i = 0; i < FIX_BTMAPS_SLOTS; i++)
-		slot_virt[i] = __fix_to_virt(FIX_BTMAP_BEGIN - NR_FIX_BTMAPS*i);
+		slot_virt[i] = __fix_to_virt(FIX_BTMAP_BEGIN - NR_FIX_BTMAPS*i); // FIX_BTMAP_BEGIN - NR_FIX_BTMAPS*i
 }
 
 static int __init check_early_ioremap_leak(void)

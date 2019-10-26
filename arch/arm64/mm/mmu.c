@@ -776,9 +776,21 @@ static inline pud_t * fixmap_pud(unsigned long addr)
 
 static inline pmd_t * fixmap_pmd(unsigned long addr)
 {
-	pud_t *pudp = fixmap_pud(addr);
+	pud_t *pudp = fixmap_pud(addr); // fixmap_pud 를 또 실행함. address 는 변경되지 않았음. unsigned long addr = FIXADDR_START;
 	pud_t pud = READ_ONCE(*pudp);
 
+	/*
+	 ** pud_none(pud)
+	 * 
+	 *	#define pud_none(pud)		(!pud_val(pud))
+
+	 *	typedef struct { pudval_t pud; } pud_t;
+	 *	#define pud_val(x)	((x).pud)
+	 *	#define __pud(x)	((pud_t) { (x) } )
+
+	 ** pud_bad(pud)
+	 *  #define pud_bad(pud)		(!(pud_val(pud) & PUD_TABLE_BIT))
+	 */
 	BUG_ON(pud_none(pud) || pud_bad(pud));
 
 	return pmd_offset_kimg(pudp, addr);
@@ -856,9 +868,20 @@ void __init early_fixmap_init(void)
 	 * The boot-ioremap range spans multiple pmds, for which
 	 * we are not prepared:
 	 */
+
+	/*
+	 * fix map begin / end 가 하나의 pmd 가 아닌 경우 컴파일 에러를 냄.
+	 * __fix_to_virt 설명 링크
+	 * http://www.iamroot.org/ldocs/linux.html#sec-198-1
+	 * 
+	 * BUILD_BUG_ON - break compile if a condition is true.
+	 */
 	BUILD_BUG_ON((__fix_to_virt(FIX_BTMAP_BEGIN) >> PMD_SHIFT)
 		     != (__fix_to_virt(FIX_BTMAP_END) >> PMD_SHIFT));
 
+	/*
+	 * pmd 엔트리 하나가 fixmap 영역 전체를 커버하지 못하는 경우, 에러 표시함.
+	 */
 	if ((pmdp != fixmap_pmd(fix_to_virt(FIX_BTMAP_BEGIN)))
 	     || pmdp != fixmap_pmd(fix_to_virt(FIX_BTMAP_END))) {
 		WARN_ON(1);

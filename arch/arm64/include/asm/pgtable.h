@@ -312,7 +312,7 @@ static inline pte_t pgd_pte(pgd_t pgd)
 
 static inline pte_t pud_pte(pud_t pud)
 {
-	return __pte(pud_val(pud));
+	return __pte(pud_val(pud)); // pud.pud
 }
 
 static inline pud_t pte_pud(pte_t pte)

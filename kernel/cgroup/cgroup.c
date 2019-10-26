@@ -461,6 +461,8 @@ static u16 cgroup_ss_mask(struct cgroup *cgrp)
  * the caller is responsible for pinning the returned css if it wants to
  * keep accessing it outside the said locks.  This function may return
  * %NULL if @cgrp doesn't have @subsys_id enabled.
+ * 
+ * 
  */
 static struct cgroup_subsys_state *cgroup_css(struct cgroup *cgrp,
 					      struct cgroup_subsys *ss)
@@ -5397,6 +5399,8 @@ int __init cgroup_init_early(void)
 	init_cgroup_root(&ctx);
 	cgrp_dfl_root.cgrp.self.flags |= CSS_NO_REF;
 
+	// 2019-09-21 15주차 RCU 개념을 나중에 보기
+	// ( struct css_set __rcu		*cgroups; ) init_task.cgroups 
 	RCU_INIT_POINTER(init_task.cgroups, &init_css_set);
 
 	for_each_subsys(ss, i) {

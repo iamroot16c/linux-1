@@ -131,6 +131,14 @@ void idr_destroy(struct idr *);
  *
  * This variation of idr_init() creates an IDR which will allocate IDs
  * starting at %base.
+ * 
+ * 
+ * struct idr {
+ * 	struct radix_tree_root	idr_rt;
+ * 	unsigned int		idr_base;
+ * 	unsigned int		idr_next;
+ * };
+ * 
  */
 static inline void idr_init_base(struct idr *idr, int base)
 {

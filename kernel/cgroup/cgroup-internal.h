@@ -157,6 +157,12 @@ extern struct file_system_type cgroup_fs_type;
  * for_each_subsys - iterate all enabled cgroup subsystems
  * @ss: the iteration cursor
  * @ssid: the index of @ss, CGROUP_SUBSYS_COUNT after reaching the end
+ * 
+ * (struct cgroup_subsys *ss, ss ssid = i)
+ * 
+ * CGROUP_SUBSYS_COUNT : 
+ * 		include/linux/cgroup_subsys.h
+ * 		config 에 정해지지 않으면 0
  */
 #define for_each_subsys(ss, ssid)					\
 	for ((ssid) = 0; (ssid) < CGROUP_SUBSYS_COUNT &&		\

@@ -529,7 +529,7 @@ atomic_long_read_acquire(const atomic_long_t *v)
 }
 
 static inline void
-atomic_long_set(atomic_long_t *v, long i)
+atomic_long_set(atomic_long_t *v,3. arch/arm64/include/asm/atomic. long i)
 {
 	atomic_set(v, i);
 }

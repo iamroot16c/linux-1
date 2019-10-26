@@ -296,7 +296,7 @@ void __init setup_arch(char **cmdline_p)
 	init_mm.start_code = (unsigned long) _text;
 	init_mm.end_code   = (unsigned long) _etext;
 	init_mm.end_data   = (unsigned long) _edata;
-	init_mm.brk	   = (unsigned long) _end;
+	init_mm.brk	   = (unsigned long) _end; //  brk -> heap 영역의 끝부분
 
 	/*
 	   boot_command_line은 2048개의 원소를 갖는 배열임.
